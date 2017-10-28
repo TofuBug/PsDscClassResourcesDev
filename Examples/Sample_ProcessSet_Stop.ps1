@@ -9,7 +9,7 @@ Configuration Sample_ProcessSet_Stop
     [CmdletBinding()]
     param ()
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     ProcessSet ProcessSet1
     {

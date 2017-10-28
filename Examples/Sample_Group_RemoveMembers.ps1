@@ -10,7 +10,7 @@ Configuration Sample_Group_RemoveMembers
     [CmdletBinding()]
     param ()
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Group Group1
     {

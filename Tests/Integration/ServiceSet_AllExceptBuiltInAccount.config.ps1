@@ -34,7 +34,7 @@ Configuration $ConfigurationName
         $StartupType = 'Automatic'
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

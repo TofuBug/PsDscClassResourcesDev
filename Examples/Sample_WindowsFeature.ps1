@@ -53,7 +53,7 @@ Configuration 'Install_Feature_Telnet_Client'
         $LogPath
     )
     
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
     
     Node Localhost
     {

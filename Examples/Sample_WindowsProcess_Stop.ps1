@@ -8,7 +8,7 @@ Configuration Sample_WindowsProcess_Stop
 {
     param ()
 
-    Import-DSCResource -ModuleName 'PSDscResources'
+    Import-DSCResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

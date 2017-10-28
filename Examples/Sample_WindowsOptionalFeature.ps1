@@ -25,7 +25,7 @@ Configuration Sample_WindowsOptionalFeature
         $LogPath
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     WindowsOptionalFeature TelnetClient
     {

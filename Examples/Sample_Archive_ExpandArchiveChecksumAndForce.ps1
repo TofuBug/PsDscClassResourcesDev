@@ -13,7 +13,7 @@
 #>
 Configuration Sample_Archive_ExpandArchiveChecksumAndForce
 {
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

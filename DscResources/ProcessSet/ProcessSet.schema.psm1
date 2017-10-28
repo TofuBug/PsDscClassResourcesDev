@@ -81,7 +81,7 @@ Configuration ProcessSet
     
     $newResourceSetConfigurationParams = @{
         ResourceName = 'WindowsProcess'
-        ModuleName = 'PSDscResources'
+        ModuleName = 'PsDscClassResources'
         KeyParameterName = 'Path'
         Parameters = $PSBoundParameters
     }

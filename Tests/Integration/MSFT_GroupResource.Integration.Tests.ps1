@@ -6,7 +6,7 @@ Set-StrictMode -Version 'Latest'
 
 if ($PSVersionTable.PSVersion -lt [Version] '5.1')
 {
-    Write-Warning -Message 'Cannot run PSDscResources integration tests on PowerShell versions lower than 5.1'
+    Write-Warning -Message 'Cannot run PsDscClassResources integration tests on PowerShell versions lower than 5.1'
     return
 }
 
@@ -15,7 +15,7 @@ $script:testHelpersPath = Join-Path -Path $script:testFolderPath -ChildPath 'Tes
 Import-Module -Name (Join-Path -Path $script:testHelpersPath -ChildPath 'CommonTestHelper.psm1')
 
 $script:testEnvironment = Enter-DscResourceTestEnvironment `
-    -DscResourceModuleName 'PSDscResources' `
+    -DscResourceModuleName 'PsDscClassResources' `
     -DscResourceName 'MSFT_GroupResource' `
     -TestType 'Integration'
 
@@ -53,7 +53,7 @@ try
             }
         }
 
-        It 'Should use Group from PSDscResources' {
+        It 'Should use Group from PsDscClassResources' {
             $groupResource = Get-DscResource -Name 'Group'
 
             $groupResource | Should Not Be $null
@@ -64,7 +64,7 @@ try
                 $groupResource = $sortedGroupResrources | Select-Object -First 1
             }
 
-            $groupResource.ModuleName | Should Be 'PSDscResources'
+            $groupResource.ModuleName | Should Be 'PsDscClassResources'
         }
 
         It 'Should create an empty group' {

@@ -29,7 +29,7 @@ Configuration $ConfigurationName
         $Validate = $false
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

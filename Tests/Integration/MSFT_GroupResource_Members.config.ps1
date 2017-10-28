@@ -23,7 +23,7 @@ Configuration $ConfigurationName
         $Members = @()
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Group Group1
     {

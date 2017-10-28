@@ -8,7 +8,7 @@ Configuration WindowsFeatureSetExample_Install
     [CmdletBinding()]
     param ()
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     WindowsFeatureSet WindowsFeatureSet1
     {

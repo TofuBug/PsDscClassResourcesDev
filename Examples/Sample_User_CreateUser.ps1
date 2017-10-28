@@ -5,7 +5,7 @@
         $PasswordCredential
     )
 
-    Import-DscResource -ModuleName PSDscResources
+    Import-DscResource -ModuleName PsDscClassResources
 
     User UserExample
     {

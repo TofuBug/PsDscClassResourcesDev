@@ -8,7 +8,7 @@ Configuration Sample_Service_DeleteService
     param
     ()
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

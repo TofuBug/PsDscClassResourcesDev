@@ -56,7 +56,7 @@ Configuration GroupSet
 
     $newResourceSetConfigurationParams = @{
         ResourceName = 'Group'
-        ModuleName = 'PSDscResources'
+        ModuleName = 'PsDscClassResources'
         KeyParameterName = 'GroupName'
         Parameters = $PSBoundParameters
     }

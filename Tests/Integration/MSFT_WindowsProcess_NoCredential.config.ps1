@@ -24,7 +24,7 @@ Configuration $ConfigurationName
         $Ensure = 'Present'
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     WindowsProcess Process1
     {

@@ -16,7 +16,7 @@ Configuration Sample_WindowsProcess_StartUnderUser
        $Credential = (Get-Credential)
     )
 
-    Import-DSCResource -ModuleName 'PSDscResources'
+    Import-DSCResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

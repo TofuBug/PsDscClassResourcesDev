@@ -9,7 +9,7 @@
 #>
 Configuration Sample_MsiPackage_UninstallPackageFromHttps
 {
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

@@ -30,7 +30,7 @@ Configuration $ConfigurationName
         $Target = ('Process', 'Machine')
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Environment Environment1
     {

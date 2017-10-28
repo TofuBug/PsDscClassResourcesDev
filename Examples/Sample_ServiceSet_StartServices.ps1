@@ -4,7 +4,7 @@
 #>
 Configuration ServiceSetStartExample
 {
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     ServiceSet ServiceSet1
     {

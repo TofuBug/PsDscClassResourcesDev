@@ -25,7 +25,7 @@ Configuration $ConfigurationName
         $BuiltInAccount
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

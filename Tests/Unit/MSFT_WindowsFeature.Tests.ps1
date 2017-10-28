@@ -10,7 +10,7 @@ $script:testHelpersPath = Join-Path -Path $script:testFolderPath -ChildPath 'Tes
 Import-Module -Name (Join-Path -Path $script:testHelpersPath -ChildPath 'CommonTestHelper.psm1')
 
 $script:testEnvironment = Enter-DscResourceTestEnvironment `
-    -DSCResourceModuleName 'PSDscResources' `
+    -DSCResourceModuleName 'PsDscClassResources' `
     -DSCResourceName 'MSFT_WindowsFeature' `
     -TestType 'Unit'
 

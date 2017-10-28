@@ -66,7 +66,7 @@ Configuration $ConfigurationName
         $TerminateTimeout = 30000
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

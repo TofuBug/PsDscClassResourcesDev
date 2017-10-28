@@ -12,7 +12,7 @@ Configuration Sample_GroupSet_AddMembers
     [CmdletBinding()]
     param ()
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     GroupSet GroupSet
     {

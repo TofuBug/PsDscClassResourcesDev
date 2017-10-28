@@ -30,7 +30,7 @@ Configuration $ConfigurationName
         $NoWindowsUpdateCheck = $true
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     WindowsOptionalFeature WindowsOptionalFeature1
     {

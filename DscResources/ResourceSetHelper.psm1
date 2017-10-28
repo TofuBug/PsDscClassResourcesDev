@@ -93,13 +93,13 @@ function New-ResourceSetCommonParameterString
     .EXAMPLE
         New-ResourceSetConfigurationString `
             -ResourceName 'WindowsFeature' `
-            -ModuleName 'PSDscResources' `
+            -ModuleName 'PsDscClassResources' `
             -KeyParameterName 'Name' `
             -KeyParameterValues @( 'Telnet-Client', 'Web-Server' ) `
             -CommonParameterString 'Ensure = "Present"`r`nIncludeAllSubFeature = $true'
 
         OUTPUT (as a String):
-            Import-Module -Name WindowsFeature -ModuleName PSDscResources
+            Import-Module -Name WindowsFeature -ModuleName PsDscClassResources
 
             WindowsFeature Resource0
             {

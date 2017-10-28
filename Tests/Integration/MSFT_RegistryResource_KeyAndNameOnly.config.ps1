@@ -24,7 +24,7 @@ Configuration $ConfigurationName
         $ValueName
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

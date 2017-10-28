@@ -29,7 +29,7 @@ Configuration $ConfigurationName
         $LogPath = (Join-Path -Path (Get-Location) -ChildPath 'WindowsPackageCabTestLog.txt')
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     WindowsPackageCab WindowsPackageCab1
     {

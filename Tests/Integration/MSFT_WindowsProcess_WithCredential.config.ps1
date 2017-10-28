@@ -29,7 +29,7 @@ Configuration $ConfigurationName
         $Credential = (Get-Credential)
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Node $AllNodes.NodeName
     {

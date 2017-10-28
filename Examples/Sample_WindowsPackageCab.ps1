@@ -35,7 +35,7 @@ Configuration Sample_WindowsPackageCab
         $LogPath
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     WindowsPackageCab WindowsPackageCab1
     {

@@ -18,7 +18,7 @@ Configuration Sample_WindowsProcess_StopUnderUser
        $Credential = (Get-Credential)
     )
 
-    Import-DSCResource -ModuleName 'PSDscResources'
+    Import-DSCResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

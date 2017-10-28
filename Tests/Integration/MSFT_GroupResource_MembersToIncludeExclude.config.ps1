@@ -26,7 +26,7 @@ Configuration $ConfigurationName
         $MembersToExclude = @()
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Group Group2
     {

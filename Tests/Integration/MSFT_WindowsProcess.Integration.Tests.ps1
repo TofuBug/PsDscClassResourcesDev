@@ -3,7 +3,7 @@ Set-StrictMode -Version 'Latest'
 
 if ($PSVersionTable.PSVersion -lt [Version] '5.1')
 {
-    Write-Warning -Message 'Cannot run PSDscResources integration tests on PowerShell versions lower than 5.1'
+    Write-Warning -Message 'Cannot run PsDscClassResources integration tests on PowerShell versions lower than 5.1'
     return
 }
 
@@ -14,7 +14,7 @@ Describe 'WindowsProcess Integration Tests' {
         Import-Module -Name (Join-Path -Path $script:testHelpersPath -ChildPath 'CommonTestHelper.psm1')
 
         $script:testEnvironment = Enter-DscResourceTestEnvironment `
-            -DscResourceModuleName 'PSDscResources' `
+            -DscResourceModuleName 'PsDscClassResources' `
             -DscResourceName 'MSFT_WindowsProcess' `
             -TestType 'Integration'
 

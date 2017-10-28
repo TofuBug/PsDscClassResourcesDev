@@ -9,7 +9,7 @@
 #>
 Configuration Sample_Archive_RemoveArchiveNoValidation
 {
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

@@ -10,7 +10,7 @@ Describe 'Archive Unit Tests' {
         Import-Module -Name $commonTestHelperFilePath
 
         $script:testEnvironment = Enter-DscResourceTestEnvironment `
-            -DscResourceModuleName 'PSDscResources' `
+            -DscResourceModuleName 'PsDscClassResources' `
             -DscResourceName 'MSFT_Archive' `
             -TestType 'Unit'
     }

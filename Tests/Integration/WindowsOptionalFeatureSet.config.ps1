@@ -23,7 +23,7 @@ Configuration $ConfigurationName
         $LogPath
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     WindowsOptionalFeatureSet WindowsOptionalFeatureSet1
     {

@@ -3,7 +3,7 @@ Set-StrictMode -Version 'Latest'
 
 if ($PSVersionTable.PSVersion -lt [Version] '5.1')
 {
-    Write-Warning -Message 'Cannot run PSDscResources integration tests on PowerShell versions lower than 5.1'
+    Write-Warning -Message 'Cannot run PsDscClassResources integration tests on PowerShell versions lower than 5.1'
     return
 }
 
@@ -13,7 +13,7 @@ $commonTestHelperFilePath = Join-Path -Path $testHelperFolderFilePath -ChildPath
 Import-Module -Name $script:commonTestHelperFilePath
 
 $script:testEnvironment = Enter-DscResourceTestEnvironment `
-    -DscResourceModuleName 'PSDscResources' `
+    -DscResourceModuleName 'PsDscClassResources' `
     -DscResourceName 'MSFT_MsiPackage' `
     -TestType 'Unit'
 

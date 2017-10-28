@@ -8,7 +8,7 @@ Configuration Sample_ProcessSet_Start
     [CmdletBinding()]
     param ()
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     ProcessSet ProcessSet1
     {

@@ -77,7 +77,7 @@ Configuration ServiceSet
 
     $newResourceSetConfigurationParams = @{
         ResourceName = 'Service'
-        ModuleName = 'PSDscResources'
+        ModuleName = 'PsDscClassResources'
         KeyParameterName = 'Name'
         Parameters = $PSBoundParameters
     }

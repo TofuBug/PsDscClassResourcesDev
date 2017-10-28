@@ -7,7 +7,7 @@ Configuration Sample_WindowsProcess_Start
 {
     param ()
 
-    Import-DSCResource -ModuleName 'PSDscResources'
+    Import-DSCResource -ModuleName 'PsDscClassResources'
 
     Node localhost
     {

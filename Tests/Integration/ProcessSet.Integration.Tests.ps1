@@ -1,7 +1,7 @@
 ﻿
 if ($PSVersionTable.PSVersion -lt [Version] '5.1')
 {
-    Write-Warning -Message 'Cannot run PSDscResources integration tests on PowerShell versions lower than 5.1'
+    Write-Warning -Message 'Cannot run PsDscClassResources integration tests on PowerShell versions lower than 5.1'
     return
 }
 
@@ -13,7 +13,7 @@ $script:testHelpersPath = Join-Path -Path $script:testFolderPath -ChildPath 'Tes
 Import-Module -Name (Join-Path -Path $script:testHelpersPath -ChildPath 'CommonTestHelper.psm1')
 
 $script:testEnvironment = Enter-DscResourceTestEnvironment `
-    -DscResourceModuleName 'PSDScResources' `
+    -DscResourceModuleName 'PsDscClassResources' `
     -DscResourceName 'ProcessSet' `
     -TestType 'Integration'
 

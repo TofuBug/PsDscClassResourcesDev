@@ -20,7 +20,7 @@ Configuration $ConfigurationName
         $Ensure = 'Present'
     )
 
-    Import-DscResource -ModuleName 'PSDscResources'
+    Import-DscResource -ModuleName 'PsDscClassResources'
 
     Group Group3
     {
