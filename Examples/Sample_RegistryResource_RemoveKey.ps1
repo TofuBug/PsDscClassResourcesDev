@@ -5,7 +5,7 @@
 #>
 Configuration Sample_RegistryResource_RemoveKey
 {
-    Import-DscResource -ModuleName 'PsDscClassResources'
+    Import-DscResource -ModuleName 'PsDscClassResources_Dev'
 
     Node localhost
     {

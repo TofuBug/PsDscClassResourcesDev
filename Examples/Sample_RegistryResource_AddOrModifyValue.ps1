@@ -10,7 +10,7 @@
 #>
 Configuration Sample_RegistryResource_AddOrModifyValue
 {
-    Import-DscResource -ModuleName 'PsDscClassResources'
+    Import-DscResource -ModuleName 'PsDscClassResources_Dev'
 
     Node localhost
     {
