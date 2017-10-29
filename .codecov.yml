@@ -15,6 +15,7 @@ coverage:
     project:
       default:
         # Set the overall project code coverage requirement to 70%
+        # Testing Remote Push
         target: 70
     patch:
       default:
