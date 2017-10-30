@@ -1,1454 +1,652 @@
-$errorActionPreference = 'Stop'
-Set-StrictMode -Version 'Latest'
-
+﻿using namespace System
+using namespace System.Collections.Generic
+using namespace System.Collections
+using namespace System.Globalization
+using namespace Microsoft.Win32
 # Import CommonResourceHelper for Get-LocalizedData
-$script:dscResourcesFolderFilePath = Split-Path $PSScriptRoot -Parent
-$script:commonResourceHelperFilePath = Join-Path -Path $script:dscResourcesFolderFilePath -ChildPath 'CommonResourceHelper.psm1'
-Import-Module -Name $script:commonResourceHelperFilePath
+using module ..\CRHelper.psm1
 
-# Localized messages for verbose and error statements in this resource
-$script:localizedData = Get-LocalizedData -ResourceName 'MSFT_RegistryResource'
-
-$script:registryDriveRoots = @{
-    'HKCC' = 'HKEY_CURRENT_CONFIG'
-    'HKCR' = 'HKEY_CLASSES_ROOT'
-    'HKCU' = 'HKEY_CURRENT_USER'
-    'HKLM' = 'HKEY_LOCAL_MACHINE'
-    'HKUS' = 'HKEY_USERS'
+# Ensure enumeration for testing the DSC resource
+enum Ensure {
+    Absent
+    Present
 }
 
-<#
-    .SYNOPSIS
-        Retrieves the current state of the Registry resource with the given Key.
-
-    .PARAMETER Key
-        The path of the registry key to retrieve the state of.
-        This path must include the registry hive.
-
-    .PARAMETER ValueName
-        The name of the registry value to retrieve the state of.
-
-    .PARAMETER ValueData
-        Used only as a boolean flag (along with ValueType) to determine if the target entity is the
-        Default Value or the key itself.
-
-    .PARAMETER ValueType
-        Used only as a boolean flag (along with ValueData) to determine if the target entity is the
-        Default Value or the key itself.
-#>
-function Get-TargetResource
-{
-    [CmdletBinding()]
-    [OutputType([Hashtable])]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [String]
-        $Key,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNull()]
-        [String]
-        [AllowEmptyString()]
-        $ValueName,
-
-        [String[]]
-        $ValueData,
-
-        [ValidateSet('String', 'Binary', 'DWord', 'QWord', 'MultiString', 'ExpandString')]
-        [String]
-        $ValueType
-    )
-
-    Write-Verbose -Message ($script:localizedData.GetTargetResourceStartMessage -f $Key)
-
-    $registryResource = @{
-        Key = $Key
-        Ensure = 'Absent'
-        ValueName = $null
-        ValueType = $null
-        ValueData = $null
-    }
-
-    # Retrieve the registry key at the specified path
-    $registryKey = Get-RegistryKey -RegistryKeyPath $Key
-
-    # Check if the registry key exists
-    if ($null -eq $registryKey)
-    {
-        Write-Verbose -Message ($script:localizedData.RegistryKeyDoesNotExist -f $Key)
-    }
-    else
-    {
-        Write-Verbose -Message ($script:localizedData.RegistryKeyExists -f $Key)
-
-        # Check if the user specified a value name to retrieve
-        $valueNameSpecified = (-not [String]::IsNullOrEmpty($ValueName)) -or $PSBoundParameters.ContainsKey('ValueType') -or $PSBoundParameters.ContainsKey('ValueData')
-
-        if ($valueNameSpecified)
-        {
-            $valueDisplayName = Get-RegistryKeyValueDisplayName -RegistryKeyValueName $ValueName
-            $registryResource['ValueName'] = $valueDisplayName
-
-            # If a value name was specified, retrieve the value with the specified name from the retrieved registry key
-            $registryKeyValue = Get-RegistryKeyValue -RegistryKey $registryKey -RegistryKeyValueName $ValueName
-
-            # Check if the registry key value exists
-            if ($null -eq $registryKeyValue)
-            {
-                Write-Verbose -Message ($script:localizedData.RegistryKeyValueDoesNotExist -f $Key, $valueDisplayName)
-            }
-            else
-            {
-                Write-Verbose -Message ($script:localizedData.RegistryKeyValueExists -f $Key, $valueDisplayName)
-
-                # If the registry key value exists, retrieve its type
-                $actualValueType = Get-RegistryKeyValueType -RegistryKey $registryKey -RegistryKeyValueName $ValueName
-
-                # If the registry key value exists, convert it to a readable string
-                $registryKeyValueAsReadableString = @() + (ConvertTo-ReadableString -RegistryKeyValue $registryKeyValue -RegistryKeyValueType $actualValueType)
-
-                $registryResource['Ensure'] = 'Present'
-                $registryResource['ValueType'] = $actualValueType
-                $registryResource['ValueData'] = $registryKeyValueAsReadableString
-            }
-        }
-        else
-        {
-            $registryResource['Ensure'] = 'Present'
-        }
-    }
-
-    Write-Verbose -Message ($script:localizedData.GetTargetResourceEndMessage -f $Key)
-
-    return $registryResource
+# Enumeration to limit choices to the 5 registry hives still in use in Windows 10 (No more DynData and PerformanceData) 
+enum Hive {
+    ClassesRoot = [RegistryHive]::ClassesRoot
+    CurrentConfig = [RegistryHive]::CurrentConfig
+    CurrentUser = [RegistryHive]::CurrentUser
+    LocalMachine = [RegistryHive]::LocalMachine
+    Users = [RegistryHive]::Users
 }
 
-<#
-    .SYNOPSIS
-        Sets the Registry resource with the given Key to the specified state.
+[DscResource()]
+class xRegistryKey {
+    [DscProperty(Key)]
+    [ValidateNotNullOrEmpty()]
+    [Hive] $Hive
 
-    .PARAMETER Key
-        The path of the registry key to set the state of.
-        This path must include the registry hive.
+    [DscProperty(Key)]
+    [ValidateNotNullOrEmpty()]
+    [string] $Key
 
-    .PARAMETER ValueName
-        The name of the registry value to set.
+    [DscProperty(Mandatory)]
+    [Ensure] $Ensure
 
-        To add or remove a registry key, specify this property as an empty string without
-        specifying ValueType or ValueData. To modify or remove the default value of a registry key,
-        specify this property as an empty string while also specifying ValueType or ValueData.
+    [DscProperty()]
+    [Boolean] $Force = $false
 
-    .PARAMETER Ensure
-        Specifies whether or not the registry key with the given path and the registry key value with the given name should exist.
-        
-        To ensure that the registry key and value exists, set this property to Present.
-        To ensure that the registry key and value do not exist, set this property to Absent.
-        
-        The default value is Present.
+    # We only need one set of Localization Data So we make it static
+    hidden static [hashtable] $LocalizedData
 
-    .PARAMETER ValueData
-        The data to set as the registry key value.
-
-    .PARAMETER ValueType
-        The type of the value to set.
-        
-        The supported types are:
-            String (REG_SZ)
-            Binary (REG-BINARY)
-            Dword 32-bit (REG_DWORD)
-            Qword 64-bit (REG_QWORD)
-            Multi-string (REG_MULTI_SZ)
-            Expandable string (REG_EXPAND_SZ)
-
-    .PARAMETER Hex
-        Specifies whether or not the value data should be expressed in hexadecimal format.
-
-        If specified, DWORD/QWORD value data is presented in hexadecimal format.
-        Not valid for other value types.
-        
-        The default value is $false.
-
-    .PARAMETER Force
-        Specifies whether or not to overwrite the registry key with the given path with the new
-        value if it is already present. 
-#>
-function Set-TargetResource
-{
-    [CmdletBinding(SupportsShouldProcess = $true)]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [String]
-        $Key,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNull()]
-        [String]
-        [AllowEmptyString()]
-        $ValueName,
-
-        [ValidateSet('Present', 'Absent')]
-        [String]
-        $Ensure = 'Present',
-
-        [ValidateNotNull()]
-        [String[]]
-        $ValueData = @(),
-
-        [ValidateSet('String', 'Binary', 'DWord', 'QWord', 'MultiString', 'ExpandString')]
-        [String]
-        $ValueType = 'String',
-
-        [Boolean]
-        $Hex = $false,
-
-        [Boolean]
-        $Force = $false
-    )
-
-    Write-Verbose -Message ($script:localizedData.SetTargetResourceStartMessage -f $Key)
-
-    # Retrieve the registry key at the specified path
-    $registryKey = Get-RegistryKey -RegistryKeyPath $Key -WriteAccessAllowed
-
-    # Check if the registry key exists
-    if ($null -eq $registryKey)
-    {
-        Write-Verbose -Message ($script:localizedData.RegistryKeyDoesNotExist -f $Key)
-
-        # Check if the user wants the registry key to exist
-        if ($Ensure -eq 'Present')
-        {
-            Write-Verbose -Message ($script:localizedData.CreatingRegistryKey -f $Key)
-            $registryKey = New-RegistryKey -RegistryKeyPath $Key
-        }
+    <#
+        .SYNOPSIS
+            Static Constructor to Initialize xRegistry's static properties
+    #>
+    static xRegistryKey() {
+        # Populate Localization Data
+        Write-Verbose -Message "Static Constructor"
+        [xRegistryKey]::LocalizedData = [CRHelper]::Get_LocalizedData('MSFT_RegistryResource')
     }
-
-    # Check if the registry key exists
-    if ($null -ne $registryKey)
-    {
-        Write-Verbose -Message ($script:localizedData.RegistryKeyExists -f $Key)
-
-        $valueNameSpecified = (-not [String]::IsNullOrEmpty($ValueName)) -or $PSBoundParameters.ContainsKey('ValueType') -or $PSBoundParameters.ContainsKey('ValueData')
-
-        # Check if the user wants to set a registry key value
-        if ($valueNameSpecified)
-        {
-            # Retrieve the display name of the specified registry key value
-            $valueDisplayName = Get-RegistryKeyValueDisplayName -RegistryKeyValueName $ValueName
-
-            # Retrieve the existing registry key value
-            $actualRegistryKeyValue = Get-RegistryKeyValue -RegistryKey $registryKey -RegistryKeyValueName $ValueName
-
-            # Check if the user wants to add/modify or remove the registry key value
-            if ($Ensure -eq 'Present')
-            {
-                # Convert the specified registry key value to the specified type
-                $expectedRegistryKeyValue = switch ($ValueType)
-                {
-                    'Binary' { ConvertTo-Binary  -RegistryKeyValue $ValueData; break }
-                    'DWord' { ConvertTo-DWord -RegistryKeyValue $ValueData -Hex $Hex; break }
-                    'MultiString' { ConvertTo-MultiString -RegistryKeyValue $ValueData; break }
-                    'QWord' { ConvertTo-QWord -RegistryKeyValue $ValueData -Hex $Hex; break }
-                    default { ConvertTo-String -RegistryKeyValue $ValueData}
-                }
-
-                # Retrieve the name of the registry key
-                $registryKeyName = Get-RegistryKeyName -RegistryKey $registryKey
-
-                # Check if the registry key value exists
-                if ($null -eq $actualRegistryKeyValue)
-                {
-                    # If the registry key value does not exist, set the new value
-                    Write-Verbose -Message ($script:localizedData.SettingRegistryKeyValue -f $valueDisplayName, $Key)
-                    $null = Set-RegistryKeyValue -RegistryKeyName $registryKeyName -RegistryKeyValueName $ValueName -RegistryKeyValue $expectedRegistryKeyValue -ValueType $ValueType
-                }
-                else
-                {
-                    # If the registry key value exists, check if the specified registry key value matches the retrieved registry key value
-                    if (Test-RegistryKeyValuesMatch -ExpectedRegistryKeyValue $expectedRegistryKeyValue -ActualRegistryKeyValue $actualRegistryKeyValue -RegistryKeyValueType $ValueType)
-                    {
-                        # If the specified registry key value matches the retrieved registry key value, no change is needed
-                        Write-Verbose -Message ($script:localizedData.RegistryKeyValueAlreadySet -f $valueDisplayName, $Key)
-                    }
-                    else
-                    {
-                        # If the specified registry key value matches the retrieved registry key value, check if the user wants to overwrite the value
-                        if (-not $Force)
-                        {
-                            # If the user does not want to overwrite the value, throw an error
-                            New-InvalidOperationException -Message ($script:localizedData.CannotOverwriteExistingRegistryKeyValueWithoutForce -f $Key, $valueDisplayName)
-                        }
-                        else
-                        {
-                            # If the user does want to overwrite the value, overwrite the value
-                            Write-Verbose -Message ($script:localizedData.OverwritingRegistryKeyValue -f $valueDisplayName, $Key)
-                            $null = Set-RegistryKeyValue -RegistryKeyName $registryKeyName -RegistryKeyValueName $ValueName -RegistryKeyValue $expectedRegistryKeyValue -ValueType $ValueType
-                        }
-                    }   
-                }
-            }
-            else
-            {
-                # Check if the registry key value exists
-                if ($null -ne $actualRegistryKeyValue)
-                {
-                    Write-Verbose -Message ($script:localizedData.RemovingRegistryKeyValue -f $valueDisplayName, $Key)
-                        
-                    # If the specified registry key value exists, check if the user specified a registry key value with a name to remove
-                    if (-not [String]::IsNullOrEmpty($ValueName))
-                    {
-                        # If the user specified a registry key value with a name to remove, remove the registry key value with the specified name
-                        $null = Remove-ItemProperty -Path $Key -Name $ValueName -Force
-                    }
-                    else
-                    {
-                        # If the user did not specify a registry key value with a name to remove, remove the default registry key value
-                        $null = Remove-DefaultRegistryKeyValue -RegistryKey $registryKey
-                    }
-                }
-            }
+     
+    <# 
+       .SYNOPSIS 
+           Retrieves the current state of the Registry resource with the given Hive and Key. 
+    #>
+    [xRegistryKey] Get() {
+        Write-Verbose -Message ([xRegistryKey]::LocalizedData.GetStartMessage -f $this.Hive, $this.Key)
+        # Set Ensure if the registry key exists or not
+        if ($this.KeyExists($this.key)) {
+            Write-Verbose -Message ([xRegistryKey]::LocalizedData.RegistryKeyExists -f $this.Hive, $this.Key)
+            $this.Ensure = [Ensure]::Present
         }
-        else
-        {
+        else { 
+            Write-Verbose -Message ([xRegistryKey]::LocalizedData.RegistryKeyDoesNotExist -f $this.hive, $this.Key)
+            $this.Ensure = [Ensure]::Absent
+        }
+        Write-Verbose -Message ([xRegistryKey]::LocalizedData.GetEndMessage -f $this.Hive, $this.Key)
+        return $this
+    }
+ 
+    <# 
+        .SYNOPSIS 
+            Sets the Registry resource with the given Key to the specified state. 
+    #>
+    [void] Set() {    
+        Write-Verbose -Message ([xRegistryKey]::LocalizedData.SetStartMessage -f $this.Hive, $this.Key)
+        # Check if the registry key exists
+        if ($this.KeyExists($this.Key)) {
+            Write-Verbose -Message ([xRegistryKey]::LocalizedData::RegistryKeyExist -f $this.Hive, $this.Key)
             # Check if the user wants to remove the registry key
-            if ($Ensure -eq 'Absent')
-            {
-                # Retrieve the number of subkeys the registry key has
-                $registryKeySubKeyCount = Get-RegistryKeySubKeyCount -RegistryKey $registryKey
-
+            if ($this.Ensure -eq [Ensure]::Absent) {
                 # Check if the registry key has subkeys and the user does not want to forcibly remove the registry key
-                if ($registryKeySubKeyCount -gt 0 -and -not $Force)
-                {
-                    New-InvalidOperationException -Message ($script:localizedData.CannotRemoveExistingRegistryKeyWithSubKeysWithoutForce -f $Key)
+                if ($this.HasSubKeys($this.Key) -and -not $this.Force) {
+                    [CRHelper]::New_InvalidOperationException(([xRegistryKey].LocalizedData.CannotRemoveExistingRegistryKeyWithSubKeysWithoutForce -f $this.Hive, $this.Key))
                 }
-                else
-                {
+                else {
                     # Remove the registry key
-                    Write-Verbose -Message ($script:localizedData.RemovingRegistryKey -f $Key)
-                    $null = Remove-Item -Path $Key -Recurse -Force
+                    Write-Verbose -Message ([xRegistryKey]::LocalizedData.RemovingRegistryKey -f $this.Hive, $this.Key)
+                    Remove-Item -Path "$($this.Hive):\$($this.Key)" -Recurse -Force
                 }
             }
         }
+        else {
+            Write-Verbose -Message ([xRegistryKey]::LocalizedData.RegistryKeyDoesNotExist -f $this.Hive, $this.Key)
+            # Check if the user wants the registry key to exist
+            if ($this.Ensure -eq [Ensure]::Present) {
+                Write-Verbose -Message ([xRegistryKey]::LocalizedData.CreatingRegistryKey -f $this.Hive, $this.Key)
+                $this.New_RegistryKey()
+            }
+        }
+        Write-Verbose -Message ([xRegistryKey]::LocalizedData.SetEndMessage -f $this.Hive, $this.Key)
     }
+    
+    <# 
+        .SYNOPSIS 
+            Tests if the Registry resource with the given key is in the specified state. 
+    #>
+    [bool] Test() {
+        Write-Verbose -Message ([xRegistryKey]::LocalizedData.TestStartMessage -f $this.Hive, $this.Key)
+        $registryResourceInDesiredState = if ($this.KeyExists($this.Key)) { $this.ensure -eq [Ensure]::Present } else { $this.ensure -eq [Ensure]::Absent }
+        Write-Verbose -Message ([xRegistryKey]::LocalizedData.TestEndMessage -f $this.Hive, $this.Key)
+        return $registryResourceInDesiredState
+    }
+                     
+    <# 
+        .SYNOPSIS 
+            Mounts the registry drive with the specified name. 
+    #>
+    hidden [void] Mount_RegistryDrive() {
+        $registryDriveInfo = Get-PSDrive -Name $this.Hive -ErrorAction 'SilentlyContinue'
+        if ($null -eq $registryDriveInfo) {
+            $newPSDriveParameters = @{
+                Name = $this.Hive
+                Root = [Registry]::"$($this.Hive)".Name
+                PSProvider = 'Registry'
+                Scope = 'Script'
+            }
+            $registryDriveInfo = New-PSDrive @newPSDriveParameters
+        }    
+        # Validate that the specified PSDrive is valid
+        if (($null -eq $registryDriveInfo) -or ($null -eq $registryDriveInfo.Provider) -or ($registryDriveInfo.Provider.Name -ine 'Registry')) {
+            [CRHelper]::New_InvalidOperationException(([xRegistryKey]::LocalizedData.RegistryDriveCouldNotBeMounted -f $this.Hive))
+        }
+    }
+     
+    <# 
+        .SYNOPSIS 
+            Opens the specified registry sub key under the specified registry parent key. 
+            This is a wrapper function for unit testing. 
+  
+        .PARAMETER ParentKey 
+            The parent registry key which contains the sub key to open. 
+  
+        .PARAMETER SubKey 
+            The sub key to open. 
+  
+        .PARAMETER WriteAccessAllowed 
+            Specifies whether or not to open the sub key with permissions to write to it. 
+    #>
+    hidden [RegistryKey] Open_RegistrySubKey([RegistryKey] $ParentKey, [String] $SubKey, [bool] $WriteAccessAllowed) { return $ParentKey.OpenSubKey($SubKey, $WriteAccessAllowed) }
+          
+    <# 
+        .SYNOPSIS 
+            Opens and retrieves the registry key at the specified path. 
+  
+        .PARAMETER RegistryKeyPath 
+            The path to the registry key to open. 
+            The path must include the registry drive. 
+  
+        .PARAMETER WriteAccessAllowed 
+            Specifies whether or not to open the key with permissions to write to it. 
+  
+        .NOTES 
+            This method is used instead of Get-Item so that there is no ambiguity between 
+            forward slashes as path separators vs literal characters in a key name 
+            (which is valid in the registry). 
+    #>
+    hidden [RegistryKey] Get_RegistryKey([String] $RegistryKeyPath,[bool] $WriteAccessAllowed) {
+        # Mount the registry drive if needed
+        $this.Mount_RegistryDrive()
+        # Retrieve the registry drive key
+        $registryDriveKey = Get-Item -LiteralPath ("$($this.Hive):")
+        # Open and return the registry drive subkey
+        return $this.Open_RegistrySubKey($registryDriveKey,$RegistryKeyPath,$WriteAccessAllowed)
+    }
+    
+    <# 
+        .SYNOPSIS 
+            Creates a new subkey with the specified name under the specified registry key. 
+            This is a wrapper function for unit testing. 
+  
+        .PARAMETER ParentRegistryKey 
+            The parent registry key to create the new subkey under. 
+  
+        .PARAMETER SubKeyName 
+            The name of the new subkey to create. 
+    #>
+    hidden [RegistryKey] New_RegistrySubKey([RegistryKey] $ParentRegistryKey,[String] $SubKeyName) { return $ParentRegistryKey.CreateSubKey($SubKeyName) }
+    
+    <# 
+        .SYNOPSIS 
+            Creates a new registry key at the specified registry key path. 
+    #>
+    hidden [RegistryKey] New_RegistryKey() {
+        # Registry key names can contain forward slashes, so we can't use Split-Path here (it will split on /)
+        Write-Verbose -Message "Key: $($this.Key)"
+        $Tokens = $this.Key -split '\\'
+        Write-Verbose -Message "Tokens = $Tokens"
+        $RegKey = if (-not $this.KeyExists(($ParentPath = $Tokens[0]))) { 
+            Write-Verbose -Message "Creating Path $([Registry]::"$($this.Hive)")"
+            $this.New_RegistrySubKey([Registry]::"$($this.Hive)",$ParentPath) 
+        }
+        else { $this.Get_RegistryKey($ParentPath,$true) }
+        for ($i = 1; $i -lt $Tokens.Count; $i++){
+            $RegKey = if (-not $this.KeyExists(($ParentPath += "\$($Tokens[$i])"))) { 
+                $this.New_RegistrySubKey($RegKey,$Tokens[$i]) 
+            }
+            else { $this.Get_RegistryKey($ParentPath, $true) }
+           
+        }
+        return $RegKey        
+    }
+    
+    <# 
+        .SYNOPSIS 
+            Checks if a key has subkeys under the specificregistry key. 
+            This is a wrapper function for unit testing. 
 
-    Write-Verbose -Message ($script:localizedData.SetTargetResourceEndMessage -f $Key)
+        .PARAMETER Path 
+            The path to the registry key to retrieve the subkeys of. 
+    #>
+    hidden [bool] HasSubKeys([String] $RegistryKeyPath ) { return ($this.Get_RegistryKey($RegistryKeyPath, $false).SubKeyCount -gt 0) }
+
+    <# 
+        .SYNOPSIS 
+            Tests if a Key Exists at the specified path. 
+  
+        .PARAMETER Path 
+            The path to the registry key to open. 
+    #>
+    hidden [bool] KeyExists([String] $RegistryKeyPath) { return ($null -ne $this.Get_RegistryKey($RegistryKeyPath, $false)) }
 }
 
-<#
-    .SYNOPSIS
-        Tests if the Registry resource with the given key is in the specified state.
+# Enumeration to limit choices to only the valid ValueTypes
+enum ValueKind {
+    Binary = [RegistryValueKind]::Binary
+    DWord = [RegistryValueKind]::DWord
+    MultiString = [RegistryValueKind]::MultiString
+    QWord = [RegistryValueKind]::QWord
+    String = [RegistryValueKind]::String
+}
 
-    .PARAMETER Key
-        The path of the registry key to test the state of.
-        This path must include the registry hive.
+[DscResource()]
+class xRegistryValue : xRegistryKey {
+    [DscProperty(Key)]
+    [String] $ValueName = $this.Get_RegistryKeyValueDisplayName()
 
-    .PARAMETER ValueName
-        The name of the registry value to check for.
-        Specify this property as an empty string ('') to check the default value of the registry key.
+    [DscProperty(Mandatory)]
+    [Ensure] $Ensure
 
-    .PARAMETER Ensure
-        Specifies whether or not the registry key and value should exist.
-        
-        To test that they exist, set this property to "Present".
-        To test that they do not exist, set the property to "Absent".
-        The default value is "Present".
+    [DscProperty(Mandatory)]
+    [ValueKind] $ValueType
 
-    .PARAMETER ValueData
-        The data the registry key value should have.
+    [DscProperty()]
+    [object] $ValueData
 
-    .PARAMETER ValueType
-        The type of the value.
-        
-        The supported types are:
-            String (REG_SZ)
-            Binary (REG-BINARY)
-            Dword 32-bit (REG_DWORD)
-            Qword 64-bit (REG_QWORD)
-            Multi-string (REG_MULTI_SZ)
-            Expandable string (REG_EXPAND_SZ)
+    [DscProperty()]
+    [Boolean] $Hex = $false
 
-    .PARAMETER Hex
-        Not used in Test-TargetResource.
-
-    .PARAMETER Force
-        Not used in Test-TargetResource.
-#>
-function Test-TargetResource
-{
-    [CmdletBinding()]
-    [OutputType([Boolean])]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [String]
-        $Key,
-
-        [Parameter(Mandatory = $true)]
-        [AllowEmptyString()]
-        [ValidateNotNull()]
-        [String]
-        $ValueName,
-
-        [ValidateSet('Present', 'Absent')]
-        [String]
-        $Ensure = 'Present',
-
-        [ValidateNotNull()]
-        [String[]]
-        $ValueData = @(),
-
-        [ValidateSet('String', 'Binary', 'DWord', 'QWord', 'MultiString', 'ExpandString')]
-        [String]
-        $ValueType = 'String',
-
-        [Boolean]
-        $Hex = $false,
-
-        [Boolean]
-        $Force = $false
-    )
-
-    Write-Verbose -Message ($script:localizedData.TestTargetResourceStartMessage -f $Key)
-
-    $registryResourceInDesiredState = $false
-
-    $getTargetResourceParameters = @{
-        Key = $Key
-        ValueName = $ValueName
-    }
-
-    if ($PSBoundParameters.ContainsKey('ValueType'))
-    {
-        $getTargetResourceParameters['ValueType'] = $ValueType
-    }
-
-    if ($PSBoundParameters.ContainsKey('ValueData'))
-    {
-        $getTargetResourceParameters['ValueData'] = $ValueData
-    }
-
-    $registryResource = Get-TargetResource @getTargetResourceParameters
-
-    # Check if the user specified a value name to retrieve
-    $valueNameSpecified = (-not [String]::IsNullOrEmpty($ValueName)) -or $PSBoundParameters.ContainsKey('ValueType') -or $PSBoundParameters.ContainsKey('ValueData')
-
-    if ($valueNameSpecified)
-    {
-        $valueDisplayName = Get-RegistryKeyValueDisplayName -RegistryKeyValueName $ValueName
-
-        if ($registryResource.Ensure -eq 'Absent')
-        {
-            Write-Verbose -Message ($script:localizedData.RegistryKeyValueDoesNotExist -f $Key, $valueDisplayName)
-            $registryResourceInDesiredState = $Ensure -eq 'Absent'
+    <# 
+       .SYNOPSIS 
+           Retrieves the current state of the Registry resource with the given Key, and Value. 
+    #>
+    [xRegistryValue] Get() {
+        Write-Verbose -Message ([xRegistryValue]::LocalizedData.GetTargetResourceStartMessage -f $this.Hive, $this.Key)
+        # Calling Key Base Class Get method
+        ([xRegistryKey]$this).Get()
+        # Is the Key part Present? then check the value Part (No need for further processing if Absent, if the Key does
+        # not exist obviously the Value cannot exist)
+        if ($this.Ensure -eq [Ensure]::Present) {
+            # Calls method from base class to get registry key
+            $RegistryKey = ([xRegistryKey]$this).Get_RegistryKey($this.Key,$true)
+            # Retrieve the value with the specified name from the retrieved registry key
+            $registryKeyValue = $this.Get_RegistryKeyValue($registryKey)
+            # Check if the registry key value does not exist, set Ensure and done
+            if ($null -eq $registryKeyValue) { 
+                Write-Verbose -Message ([xRegistryValue]::LocalizedData.RegistryKeyValueDoesNotExist -f $this.Hive, $this.Key, $this.ValueName) 
+                $this.Ensure = [Ensure]::Absent
+            }
+            # Other wise it exists so set the other properties and done
+            else {
+                Write-Verbose -Message ([xRegistryValue]::LocalizedData.RegistryKeyValueExists -f $this.Hive, $this.Key, $this.ValueName)
+                # If the registry key value exists, retrieve its type
+                $this.ValueType = $this.Get_RegistryKeyValueType($registryKey)
+                # If the registry key value exists, convert it to a readable string
+                $this.ValueData = $this.ConvertTo_ReadableString($registryKeyValue)
+                $this.Ensure = [Ensure]::Present
+            }
         }
+        Write-Verbose -Message ([xRegistryValue]::LocalizedData.GetTargetResourceEndMessage -f $this.Hive, $this.Key)
+        return $this
+   }
+ 
+    <# 
+        .SYNOPSIS 
+            Sets the Registry resource with the given Key, and value to the specified state. 
+    #>
+    [void] Set() {    
+        Write-Verbose -Message ([xRegistryValue]::LocalizedData.SetTargetResourceStartMessage -f $this.Hive, $this.Key)
+        # If we wish the value to be present
+        if ($this.Ensure -eq [Ensure]::Present) {
+            # Start by creating or verifying the Key part
+            ([xRegistryKey]$this).Set()
+            # Get the registry key
+            $RegistryKey = ([xRegistryKey]$this).Get_RegistryKey($this.Key,$true)
+            # Retrieve the existing registry key value
+            $actualRegistryKeyValue = $this.Get_RegistryKeyValue($RegistryKey)
+            # Convert the specified registry key value to the specified type 
+            # No need to check for ValueData being null Convert Methods set default values
+            $expectedRegistryKeyValue = switch ($this.ValueType) {
+               ([ValueKind]::Binary)      { $this.ConvertTo_Binary(); break }
+               ([ValueKind]::DWord)       { $this.ConvertTo_DWord(); break }
+               ([ValueKind]::MultiString) { $this.ConvertTo_MultiString(); break }
+               ([ValueKind]::QWord)       { $this.ConvertTo_QWord(); break }
+               ([ValueKind]::String)      { $this.ConvertTo_String(); break}
+            
+            }
+            # Check if the registry key value exists
+            if ($null -eq $actualRegistryKeyValue) {
+                # If the registry key value does not exist, set the new value
+                Write-Verbose -Message ([xRegistryValue]::LocalizedData.SettingRegistryKeyValue -f $this.ValueName, $this.Hive, $this.Key)
+                $this.Set_RegistryKeyValue($RegistryKey,$expectedRegistryKeyValue)
+            }
+            else {
+                # If the registry key value exists, check if the specified registry key value matches the retrieved registry key value
+                if ($this.Test_RegistryKeyValuesMatch($expectedRegistryKeyValue,$actualRegistryKeyValue,$this.ValueType)) {
+                    # If the specified registry key value matches the retrieved registry key value, no change is needed
+                    Write-Verbose -Message ([xRegistryValue]::LocalizedData.RegistryKeyValueAlreadySet -f $this.ValueName, $this.Hive, $this.Key)
+                }
+                else {
+                    # If the specified registry key value matches the retrieved registry key value, check if the user wants to overwrite the value
+                    if (-not $this.Force) {
+                        # If the user does not want to overwrite the value, throw an error
+                        [CRHelper]::New_InvalidOperationException(([xRegistryValue].LocalizedData.CannotOverwriteExistingRegistryKeyValueWithoutForce -f $this.Hive, $this.Key, $this.ValueName))
+                    }
+                    else {
+                        # If the user does want to overwrite the value, overwrite the value
+                        Write-Verbose -Message ([xRegistryValue]::LocalizedData.OverwritingRegistryKeyValue -f $this.ValueName, $this.Hive, $this.Key)
+                        $this.Set_RegistryKeyValue($RegistryKey,$expectedRegistryKeyValue)
+                    }
+                }   
+            }
+        }
+        # Otherwise we want the value to be absent
         else
         {
-            Write-Verbose -Message ($script:localizedData.RegistryKeyValueExists -f $Key, $valueDisplayName)
-
-            if ($Ensure -eq 'Absent')
-            {
-                $registryResourceInDesiredState = $false
+            # If we want the value to be absent and the base class passes its test 
+            # By extension the value cannot exist so we are done
+            if (([xRegistryKey]$this).Test()) {
+                Write-Verbose -Message ([xRegistryValue]::LocalizedData.RegistryKeyDoesNotExist -f $this.Hive, $this.Key)
             }
-            elseif ($PSBoundParameters.ContainsKey('ValueType') -and $ValueType -ne $registryResource.ValueType)
-            {
-                Write-Verbose -Message ($script:localizedData.RegistryKeyValueTypeDoesNotMatch -f $valueDisplayName, $Key, $ValueType, $registryResource.ValueType)
-
-                $registryResourceInDesiredState = $false
-            }
-            elseif ($PSBoundParameters.ContainsKey('ValueData'))
-            {
-                # Need to get the actual registry key value since Get-TargetResource returns
-                $registryKey = Get-RegistryKey -RegistryKeyPath $Key
-                $actualRegistryKeyValue = Get-RegistryKeyValue -RegistryKey $registryKey -RegistryKeyValueName $ValueName
-
-                if (-not $PSBoundParameters.ContainsKey('ValueType') -and $null -ne $registryResource.ValueType)
-                {
-                    $ValueType = $registryResource.ValueType
+            else {
+                # Retrieve the registry key at the specified path
+                $RegistryKey = ([xRegistryKey]$this).Get_RegistryKey($this.Key,$true)
+                # Retrieve the existing registry key value
+                $actualRegistryKeyValue = $this.Get_RegistryKeyValue($RegistryKey)
+                # Does the value not exist then we are done
+                if ($null -eq $actualRegistryKeyValue) {
+                    Write-Verbose -Message ([xRegistryValue]::LocalizedData.RegistryKeyValueDoesNotExist -f $this.Hive, $this.Key, $this.ValueName)
                 }
-
-                # Convert the specified registry key value to the specified type
-                $expectedRegistryKeyValue = switch ($ValueType)
-                {
-                    'Binary' { ConvertTo-Binary  -RegistryKeyValue $ValueData; break }
-                    'DWord' { ConvertTo-DWord -RegistryKeyValue $ValueData -Hex $Hex; break }
-                    'MultiString' { ConvertTo-MultiString -RegistryKeyValue $ValueData; break }
-                    'QWord' { ConvertTo-QWord -RegistryKeyValue $ValueData -Hex $Hex; break }
-                    default { ConvertTo-String -RegistryKeyValue $ValueData; break }
-                }
-
-                if (-not (Test-RegistryKeyValuesMatch -ExpectedRegistryKeyValue $expectedRegistryKeyValue -ActualRegistryKeyValue $actualRegistryKeyValue -RegistryKeyValueType $ValueType))
-                {
-                    Write-Verbose -Message ($script:localizedData.RegistryKeyValueDoesNotMatch -f $valueDisplayName, $Key, $ValueData, $registryResource.ValueData)
-
-                    $registryResourceInDesiredState = $false
-                }
-                else
-                {
-                    $registryResourceInDesiredState = $true
+                # So the value exists lets remove it
+                else {
+                    $this
+                    Write-Verbose -Message ([xRegistryValue]::LocalizedData.RemovingRegistryKeyValue -f $this.ValueName, $this.Hive, $this.Key)
                 }
             }
-            else
-            {
-                $registryResourceInDesiredState = $true
+        }
+        Write-Verbose -Message ([xRegistryValue]::LocalizedData.SetTargetResourceEndMessage -f $this.Hive, $this.Key)
+    }
+    
+    <# 
+        .SYNOPSIS 
+            Tests if the Registry resource with the given key and value is in the specified state. 
+    #>
+    [bool] Test() {
+        Write-Verbose -Message ([xRegistryValue]::LocalizedData.TestTargetResourceStartMessage -f $this.Hive, $this.Key)
+        [bool] $registryResourceInDesiredState = $false
+        # Test if the Key passes or fails
+        [bool] $KeyInDesiredState = ([xRegistryKey]$this).Test()
+        # Get the registry Key
+        $RegistryKey = ([xRegistryKey]$this).Get_RegistryKey($this.Key, $true)
+        # Key Test Pass & Ensure Absent is almost the same result as a Key Test Fail & Ensure Present
+        if (($KeyInDesiredState -and $this.Ensure -eq [Ensure]::Absent) -or (-not $KeyInDesiredState -and $this.Ensure -eq [Ensure]::Present)) {
+            # In both cases the Registry Key does not exist
+            Write-Verbose -Message ([xRegistryValue]::LocalizedData.RegistryKeyDoesNotExist -f $this.Hive, $this.Key)
+            # If the Registry Key does not exist the Registry Value can NOT exist by extention
+            Write-Verbose -Message ([xRegistryValue]::LocalizedData.RegistryKeyValueDoesNotExist -f $this.Hive, $this.Key, $this.ValueName)
+            # If we wanted it to be Absent then it will be true else false
+            $registryResourceInDesiredState = $this.Ensure -eq [Ensure]::Absent
+        }
+        # We have a Key now we check the ensure 
+        else {
+            # If we made it here we KNOW we have a registry Key
+            Write-Verbose -Message ([xRegistryValue].LocalizedData.RegistryKeyExists -f $this.Hive, $this.Key)
+            # Get the current value from the Registr key
+            $ActualRegistryKeyValue = $this.Get_RegistryKeyValue($RegistryKey)
+            # See if we have do NOT have a value in the registry key
+            if ($null -eq $ActualRegistryKeyValue) {
+                Write-Verbose -Message ([xRegistryValue]::LocalizedData.RegistryKeyValueDoesNotExist -f $this.Hive, $this.Key, $this.ValueName)
+                # If we wanted Absent its true, false if Present
+                $registryResourceInDesiredState = ($this.Ensure -eq [Ensure]::Absent)
+            }
+            # We have a value
+            else {
+                Write-Verbose -Message ([xRegistryValue]::LocalizedData.RegistryKeyValueExists -f $this.Hive, $this.Key, $this.ValueName)
+                $ActualRegistryKeyValueType = $this.Get_RegistryKeyValueType($registryKey)
+                $ActualRegistryKeyValueData = $this.ConvertTo_ReadableString($ActualRegistryKeyValue)
+                if ($this.ValueType -ne $ActualRegistryKeyValueType) {
+                    Write-Verbose -Message ([xRegistryValue]::LocalizedData.RegistryKeyValueTypeDoesNotMatch -f $this.ValueName, $this.Hive, $this.Key, $this.ValueType, $ActualRegistryKeyValueType)
+                    # Assume if Value is of a different Type the one we want is not there hence Ensure Absent is true
+                    $registryResourceInDesiredState = ($this.Ensure -eq [Ensure]::Absent)
+                }
+                else {
+                    # Convert the specified registry key value to the specified type
+                    # No need to check for null convert methods return default values for each type
+                    $expectedRegistryKeyValue = switch ($this.ValueType) {
+                        ([ValueKind]::Binary)      { $this.ConvertTo_Binary(); break }
+                        ([ValueKind]::DWord)       { $this.ConvertTo_DWord(); break }
+                        ([ValueKind]::MultiString) { $this.ConvertTo_MultiString(); break }
+                        ([ValueKind]::QWord)       { $this.ConvertTo_QWord(); break }
+                        ([ValueKind]::String)      { $this.ConvertTo_String(); break }
+                    }
+                    if (-not ( $this.Test_RegistryKeyValuesMatch($expectedRegistryKeyValue, $ActualRegistryKeyValue,$this.ValueType))) {
+                        Write-Verbose -Message ([xRegistryValue].LocalizedData.RegistryKeyValueDoesNotMatch -f $this.ValueName, $this.Hive, $this.Key, $this.ValueData, $ActualRegistryKeyValueData)
+                        # Assume if Value has a different Value Data than we want it is not there hence Ensure Absent is true
+                        $registryResourceInDesiredState = ($this.Ensure -eq [Ensure]::Absent)
+                    }
+                    # It did match so was Ensure set to Present
+                    else { $registryResourceInDesiredState = ($this.Ensure -eq [Ensure]::Present) }
+                }
             }
         }
+        Write-Verbose -Message ([xRegistryValue]::LocalizedData.TestTargetResourceEndMessage -f $this.Hive, $this.Key)
+        return $registryResourceInDesiredState
     }
-    else
-    {
-        if ($registryResource.Ensure -eq 'Present')
-        {
-            Write-Verbose -Message ($script:localizedData.RegistryKeyExists -f $Key)
-            $registryResourceInDesiredState = $Ensure -eq 'Present'
+
+    <# 
+        .SYNOPSIS 
+            Retrieves the display name of the default registry key value if needed. 
+    #>
+    [void] Get_RegistryKeyValueDisplayName() { if ([String]::IsNullOrEmpty($this.ValueName)) { $this.ValueName = [xRegistryValue]::LocalizedData.DefaultValueDisplayName } }
+    
+    <# 
+        .SYNOPSIS 
+            Retrieves the registry key value with the specified name from the specified registry key. 
+            This is a wrapper function for unit testing. 
+    
+        .PARAMETER RegistryKey 
+            The registry key to retrieve the value from. 
+    #>
+    hidden [object[]] Get_RegistryKeyValue([RegistryKey] $RegistryKey) {
+        $registryKeyValue = $RegistryKey.GetValue($this.ValueName, $null, [RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        return ,$registryKeyValue
+    }
+    
+    <# 
+        .SYNOPSIS 
+            Retrieves the type of the registry key value with the specified name from the the specified 
+            registry key. 
+            This is a wrapper function for unit testing. 
+    
+        .PARAMETER RegistryKey 
+            The registry key to retrieve the type of the value from. 
+    #>
+    hidden [ValueKind] Get_RegistryKeyValueType([RegistryKey] $RegistryKey) { return [ValueKind]$RegistryKey.GetValueKind($this.ValueName) }
+    
+    <# 
+        .SYNOPSIS 
+            Converts the specified byte array to a hex string. 
+    
+        .PARAMETER ByteArray 
+            The byte array to convert. 
+    #>
+    hidden [string] Convert_ByteArrayToHexString([Object[]] $ByteArray ) {
+        $hexString = ''
+        foreach ($byte in $ByteArray) { $hexString += ('{0:x2}' -f $byte) }
+        return $hexString
+    }
+    
+    <# 
+        .SYNOPSIS 
+            Converts the specified registry key value to a readable string. 
+    
+        .PARAMETER RegistryKeyValue 
+            The registry key value to convert. 
+    
+    #>
+    hidden [string] ConvertTo_ReadableString([Object[]] $RegistryKeyValue) {
+        $registryKeyValueAsString = [String]::Empty
+        if ($null -ne $RegistryKeyValue){
+            # For Binary type data, convert the received bytes back to a readable hex-string
+            if ($this.ValueType -eq [RegistryValueKind]::Binary) { $RegistryKeyValue = $this.Convert_ByteArrayToHexString($RegistryKeyValue) }        
+            if ($this.ValueType -ne [RegistryValueKind]::MultiString) { $RegistryKeyValue = [String[]] @() + $RegistryKeyValue }
+            if ($RegistryKeyValue.Count -eq 1 -and -not [String]::IsNullOrEmpty($RegistryKeyValue[0])) { $registryKeyValueAsString = $RegistryKeyValue[0].ToString() }
+            elseif ($RegistryKeyValue.Count -gt 1) { $registryKeyValueAsString = "($($RegistryKeyValue -join ', '))" }
         }
-        else
-        {
-            Write-Verbose -Message ($script:localizedData.RegistryKeyDoesNotExist -f $Key)
-            $registryResourceInDesiredState = $Ensure -eq 'Absent'
+        return @() + $registryKeyValueAsString
+    }
+             
+    <# 
+        .SYNOPSIS 
+            Converts $this.ValueData to a byte array for the Binary registry type. 
+    #>
+    hidden [byte[]] ConvertTo_Binary() {
+        if (($null -ne $this.ValueData) -and ($this.ValueData.Count -gt 1)) {
+            [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'Binary'))
         }
-    }
-
-    Write-Verbose -Message ($script:localizedData.TestTargetResourceEndMessage -f $Key)
-
-    return $registryResourceInDesiredState
-}
-
-<#
-    .SYNOPSIS
-        Retrieves the root of the specified path.
-
-    .PARAMETER Path
-        The path to retrieve the root of.
-
-    .NOTES
-        Don't use Split-Path here as it will pick up extra drives in the registry key name instead of the actual path root.
-        ex: 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Environment\TestKey2\C:/Program Files (x86)/'
-#>
-function Get-PathRoot
-{
-    [OutputType([String])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [String]
-        $Path
-    )
-
-    $pathRoot = $Path
-    $firstIndexOfBackslash = $Path.IndexOf('\')
-
-    if ($firstIndexOfBackslash -ge 0)
-    {
-        $pathRoot = $Path.Substring(0, $firstIndexOfBackslash)
-    }
-
-    return $pathRoot
-}
-
-<#
-    .SYNOPSIS
-        Converts the specified registry drive root to its corresponding registry drive name.
-
-    .PARAMETER RegistryDriveRoot
-        The registry drive root to convert.
-#>
-function ConvertTo-RegistryDriveName
-{
-    [OutputType([String])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [String]
-        $RegistryDriveRoot
-    )
-
-    $registryDriveName = $null
-
-    if ($script:registryDriveRoots.ContainsValue($RegistryDriveRoot))
-    {
-        foreach ($registryDriveRootsKey in $script:registryDriveRoots.Keys)
-        {
-            if ($script:registryDriveRoots[$registryDriveRootsKey] -ieq $RegistryDriveRoot)
-            {
-                $registryDriveName = $registryDriveRootsKey
-                break
+        $binaryRegistryKeyValue = [Byte[]] @()
+        if (($null -ne $this.ValueData) -and ($this.ValueData.Count -eq 1) -and (-not [String]::IsNullOrEmpty($this.ValueData[0]))) {
+            $singleRegistryKeyValue = $this.ValueData[0]
+            if ($singleRegistryKeyValue.StartsWith('0x')) { $singleRegistryKeyValue = $singleRegistryKeyValue.Substring('0x'.Length) }
+            if (($singleRegistryKeyValue.Length % 2) -ne 0) { $singleRegistryKeyValue = $singleRegistryKeyValue.PadLeft($singleRegistryKeyValue.Length + 1, '0') }
+            try {
+                for ($singleRegistryKeyValueIndex = 0 ; $singleRegistryKeyValueIndex -lt ($singleRegistryKeyValue.Length - 1) ; $singleRegistryKeyValueIndex = $singleRegistryKeyValueIndex + 2) {
+                    $binaryRegistryKeyValue += [Byte]::Parse($singleRegistryKeyValue.Substring($singleRegistryKeyValueIndex, 2), 'HexNumber')
+                }
             }
+            catch { [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.BinaryDataNotInHexFormat -f $singleRegistryKeyValue)) }
+        }
+        return $binaryRegistryKeyValue
+    }   
+    
+    <# 
+        .SYNOPSIS 
+            Converts $this.ValueData to an Int32 for the DWord registry type. 
+    #>
+    hidden [Int32] ConvertTo_DWord() {
+        if (($null -ne $this.ValueData) -and ($this.ValueData.Count -gt 1)) {
+            [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'Dword'))
+        }
+        $dwordRegistryKeyValue = [Int32] 0
+        if (($null -ne $this.ValueData) -and ($this.ValueData.Count -eq 1) -and (-not [String]::IsNullOrEmpty($this.ValueData[0]))) {
+            $singleRegistryKeyValue = $this.ValueData[0]
+            if ($this.Hex) {
+                if ($singleRegistryKeyValue.StartsWith('0x')) { $singleRegistryKeyValue = $singleRegistryKeyValue.Substring('0x'.Length) }
+                $currentCultureInfo = [CultureInfo]::CurrentCulture
+                $referenceValue = $null
+                if ([Int32]::TryParse($singleRegistryKeyValue, 'HexNumber', $currentCultureInfo, [Ref] $referenceValue)) { $dwordRegistryKeyValue = $referenceValue }
+                else { [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.DWordDataNotInHexFormat -f $singleRegistryKeyValue)) }
+            }
+            else { $dwordRegistryKeyValue = [Int32]::Parse($singleRegistryKeyValue) }
+        }
+        return $dwordRegistryKeyValue
+    }
+    
+    <# 
+        .SYNOPSIS 
+            Converts $this.ValueData to a string array for the MultiString registry type. 
+    #>
+    hidden [string[]] ConvertTo_MultiString() {
+        if (($null -ne $this.ValueData) -and ($this.ValueData.Length -gt 0)) { return [String[]]$this.ValueData }
+        else { return [String[]] @() }
+    }
+    
+    <# 
+        .SYNOPSIS 
+            Converts $this.ValueData to an Int64 for the QWord registry type. 
+    #>
+    hidden [Int64] ConvertTo_QWord() {
+        if (($null -ne $this.ValueData) -and ($this.ValueData.Count -gt 1)) {
+            [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'Qword'))
+        }
+        $qwordRegistryKeyValue = [Int64] 0  
+        if (($null -ne $this.ValueData) -and ($this.ValueData.Count -eq 1) -and (-not [String]::IsNullOrEmpty($this.ValueData[0]))) {
+            $singleRegistryKeyValue = $this.ValueData[0]
+            if ($this.Hex) {
+                if ($singleRegistryKeyValue.StartsWith('0x')) { $singleRegistryKeyValue = $singleRegistryKeyValue.Substring('0x'.Length) }
+                $currentCultureInfo = [CultureInfo]::CurrentCulture
+                $referenceValue = $null
+                if ([Int64]::TryParse($singleRegistryKeyValue, 'HexNumber', $currentCultureInfo, [Ref] $referenceValue)) { $qwordRegistryKeyValue = $referenceValue }
+                else { [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.QWordDataNotInHexFormat -f $singleRegistryKeyValue)) }
+            }
+            else { $qwordRegistryKeyValue = [Int64]::Parse($singleRegistryKeyValue) }
+        }
+        return $qwordRegistryKeyValue
+    }
+    
+    <# 
+        .SYNOPSIS 
+            Converts $this.ValueData to a string for the String or ExpandString registry types. 
+    #>
+    hidden [string] ConvertTo_String() {        
+        if (($null -ne $this.ValueData) -and ($this.ValueData.Count -gt 1)) { 
+            [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'String or ExpandString'))
+        }
+        if (($null -ne $this.ValueData) -and ($this.ValueData.Count -eq 1)) { return [String]$this.ValueData[0] }
+        else { return [String]::Empty }
+    }
+    
+    <# 
+        .SYNOPSIS 
+            Sets the specified registry key value with the specified name to the specified value. 
+            This is a wrapper function for unit testing. 
+    
+        .PARAMETER RegistryKey 
+            The key to set the value in. 
+    
+        .PARAMETER RegistryKeyValue 
+            The new value to set the registry key value to. 
+    #>
+    hidden [void] Set_RegistryKeyValue([RegistryKey] $RegistryKey, [Object] $RegistryKeyValue) {    
+        if ($this.ValueType -eq [ValueKind]::Binary) { $RegistryKeyValue = [Byte[]]$RegistryKeyValue }
+        elseif ($this.ValueType -eq [ValueKind]::MultiString) { $RegistryKeyValue = [String[]]$RegistryKeyValue }
+        $RegistryKey.SetValue($this.ValueName, $RegistryKeyValue, $this.ValueType)
+    }
+    
+    <# 
+        .SYNOPSIS 
+            Tests if the actual registry key value matches the expected registry key value. 
+    
+        .PARAMETER ExpectedRegistryKeyValue 
+            The expected registry key value to test against. 
+    
+        .PARAMETER ActualRegistryKeyValue 
+            The actual registry key value to test. 
+    
+        .PARAMETER RegistryKeyValueType 
+            The type of the registry key values. 
+    #>
+    hidden [bool] Test_RegistryKeyValuesMatch([Object] $ExpectedRegistryKeyValue, [Object] $ActualRegistryKeyValue, [ValueKind] $RegistryKeyValueType) {
+        if ($RegistryKeyValueType -eq [ValueKind]::MultiString -or $RegistryKeyValueType -eq [ValueKind]::Binary) {
+            if ($null -eq $ExpectedRegistryKeyValue) { $ExpectedRegistryKeyValue = @() }
+            if ($null -eq $ActualRegistryKeyValue) { $ActualRegistryKeyValue = @() }
+            return ($null -eq (Compare-Object -ReferenceObject $ExpectedRegistryKeyValue -DifferenceObject $ActualRegistryKeyValue))
+        }
+        else {
+            if ($null -eq $ExpectedRegistryKeyValue) { $ExpectedRegistryKeyValue = '' }
+            if ($null -eq $ActualRegistryKeyValue) { $ActualRegistryKeyValue = '' }
+            return ($ExpectedRegistryKeyValue -ieq $ActualRegistryKeyValue)
         }
     }
-
-    return $registryDriveName
-}
-
-<#
-    .SYNOPSIS
-        Retrieves the name of the registry drive at the root of the the specified registry key path.
-
-    .PARAMETER RegistryKeyPath
-        The registry key path to retrieve the registry drive name from.
-#>
-function Get-RegistryDriveName
-{
-    [OutputType([String])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [String]
-        $RegistryKeyPath
-    )
-
-    $registryKeyPathRoot = Get-PathRoot -Path $RegistryKeyPath
-    $registryKeyPathRoot = $registryKeyPathRoot.TrimEnd('\')
-
-    if ($registryKeyPathRoot.Contains(':'))
-    {
-        $registryDriveName = $registryKeyPathRoot.TrimEnd(':')
-
-        if (-not $script:registryDriveRoots.ContainsKey($registryDriveName))
-        {
-            New-InvalidArgumentException -ArgumentName 'Key' -Message ($script:localizedData.InvalidRegistryDrive -f $registryDriveName)
-        }
-    }
-    else
-    {
-        $registryDriveName = ConvertTo-RegistryDriveName -RegistryDriveRoot $registryKeyPathRoot
-
-        if ([String]::IsNullOrEmpty($registryDriveName))
-        {
-            New-InvalidArgumentException -ArgumentName 'Key' -Message ($script:localizedData.InvalidRegistryDrive -f $registryKeyPathRoot)
-        }
-    }
-
-    return $registryDriveName
-}
-
-<#
-    .SYNOPSIS
-        Mounts the registry drive with the specified name.
-
-    .PARAMETER RegistryKeyName
-        The name of the registry drive to mount.
-#>
-function Mount-RegistryDrive
-{
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [String]
-        $RegistryDriveName
-    )
-
-    $registryDriveInfo = Get-PSDrive -Name $RegistryDriveName -ErrorAction 'SilentlyContinue'
-
-    if ($null -eq $registryDriveInfo)
-    {
-        $newPSDriveParameters = @{
-            Name = $RegistryDriveName
-            Root = $script:registryDriveRoots[$RegistryDriveName]
-            PSProvider = 'Registry'
-            Scope = 'Script'
-        }
-
-        $registryDriveInfo = New-PSDrive @newPSDriveParameters
-    }
-
-    # Validate that the specified PSDrive is valid
-    if (($null -eq $registryDriveInfo) -or ($null -eq $registryDriveInfo.Provider) -or ($registryDriveInfo.Provider.Name -ine 'Registry'))
-    {
-        New-InvalidOperationException -Message ($script:localizedData.RegistryDriveCouldNotBeMounted -f $RegistryDriveName)
-    }
-}
-
-<#
-    .SYNOPSIS
-        Opens the specified registry sub key under the specified registry parent key.
-        This is a wrapper function for unit testing.
-
-    .PARAMETER ParentKey
-        The parent registry key which contains the sub key to open.
-
-    .PARAMETER SubKey
-        The sub key to open.
-
-    .PARAMETER WriteAccessAllowed
-        Specifies whether or not to open the sub key with permissions to write to it.
-#>
-function Open-RegistrySubKey
-{
-    [OutputType([Microsoft.Win32.RegistryKey])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.Win32.RegistryKey]
-        $ParentKey,
-
-        [Parameter(Mandatory = $true)]
-        [String]
-        [AllowEmptyString()]
-        $SubKey,
-
-        [Parameter()]
-        [Switch]
-        $WriteAccessAllowed
-    )
-
-    return $ParentKey.OpenSubKey($SubKey, $WriteAccessAllowed)
-}
-
-<#
-    .SYNOPSIS
-        Opens and retrieves the registry key at the specified path.
-
-    .PARAMETER RegistryKeyPath
-        The path to the registry key to open.
-        The path must include the registry drive.
-
-    .PARAMETER WriteAccessAllowed
-        Specifies whether or not to open the key with permissions to write to it.
-
-    .NOTES
-        This method is used instead of Get-Item so that there is no ambiguity between
-        forward slashes as path separators vs literal characters in a key name
-        (which is valid in the registry).
-
-#>
-function Get-RegistryKey
-{
-    [OutputType([Microsoft.Win32.RegistryKey])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [String]
-        $RegistryKeyPath,
-
-        [Switch]
-        $WriteAccessAllowed
-    )
-
-    # Parse the registry drive from the specified registry key path
-    $registryDriveName = Get-RegistryDriveName -RegistryKeyPath $RegistryKeyPath
-
-    # Mount the registry drive if needed
-    Mount-RegistryDrive -RegistryDriveName $registryDriveName
-
-    # Retrieve the registry drive key
-    $registryDriveKey = Get-Item -LiteralPath ($registryDriveName + ':')
-
-    # Parse the registry drive subkey from the specified registry key path
-    $indexOfBackSlashInPath = $RegistryKeyPath.IndexOf('\')
-    if ($indexOfBackSlashInPath -ge 0 -and $indexOfBackSlashInPath -lt ($RegistryKeyPath.Length - 1))
-    {
-        $registryDriveSubKey = $RegistryKeyPath.Substring($RegistryKeyPath.IndexOf('\') + 1)
-    }
-    else
-    {
-        $registryDriveSubKey = ''
-    }
-
-    # Open the registry drive subkey
-    $registryKey = Open-RegistrySubKey -ParentKey $registryDriveKey -SubKey $registryDriveSubKey -WriteAccessAllowed:$WriteAccessAllowed
-
-    # Return the opened registry key
-    return $registryKey
-}
-
-<#
-    .SYNOPSIS
-        Retrieves the display name of the default registry key value if needed.
-
-    .PARAMETER RegistryKeyValueName
-        The name of the registry key value to retrieve the display name of.
-#>
-function Get-RegistryKeyValueDisplayName
-{
-    [OutputType([String])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [String]
-        [AllowNull()]
-        [AllowEmptyString()]
-        $RegistryKeyValueName
-    )
-
-    $registryKeyValueDisplayName = $RegistryKeyValueName
-
-    if ([String]::IsNullOrEmpty($RegistryKeyValueName))
-    {
-        $registryKeyValueDisplayName = $script:localizedData.DefaultValueDisplayName
-    }
-
-    return $registryKeyValueDisplayName
-}
-
-<#
-    .SYNOPSIS
-        Retrieves the registry key value with the specified name from the specified registry key.
-        This is a wrapper function for unit testing.
-
-    .PARAMETER RegistryKey
-        The registry key to retrieve the value from.
-
-    .PARAMETER RegistryKeyValueName
-        The name of the registry key value to retrieve.
-#>
-function Get-RegistryKeyValue
-{
-    [OutputType([Object[]])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.Win32.RegistryKey]
-        $RegistryKey,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNull()]
-        [String]
-        [AllowEmptyString()]
-        $RegistryKeyValueName
-    )
-
-    $registryValueOptions = [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
-    $registryKeyValue = $RegistryKey.GetValue($RegistryKeyValueName, $null, $registryValueOptions)
-    return ,$registryKeyValue
-}
-
-<#
-    .SYNOPSIS
-        Retrieves the type of the registry key value with the specified name from the the specified
-        registry key.
-        This is a wrapper function for unit testing.
-
-    .PARAMETER RegistryKey
-        The registry key to retrieve the type of the value from.
-
-    .PARAMETER RegistryKeyValueName
-        The name of the registry key value to retrieve the type of.
-#>
-function Get-RegistryKeyValueType
-{
-    [OutputType([Type])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.Win32.RegistryKey]
-        $RegistryKey,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNull()]
-        [String]
-        [AllowEmptyString()]
-        $RegistryKeyValueName
-    )
-
-    return $RegistryKey.GetValueKind($RegistryKeyValueName)
-}
-
-<#
-    .SYNOPSIS
-        Converts the specified byte array to a hex string.
-
-    .PARAMETER ByteArray
-        The byte array to convert.
-#>
-function Convert-ByteArrayToHexString
-{
-    [OutputType([String])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNull()]
-        [Object[]]
-        [AllowEmptyCollection()]
-        $ByteArray
-    )
-
-    $hexString = ''
-
-    foreach ($byte in $ByteArray)
-    {
-        $hexString += ('{0:x2}' -f $byte)
-    }
-
-    return $hexString
-}
-
-<#
-    .SYNOPSIS
-        Converts the specified registry key value to a readable string.
-
-    .PARAMETER RegistryKeyValue
-        The registry key value to convert.
-
-    .PARAMETER RegistryKeyValueType
-        The type of the registry key value to convert.
-#>
-function ConvertTo-ReadableString
-{
-    [OutputType([String])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [Object[]]
-        [AllowNull()]
-        [AllowEmptyCollection()]
-        $RegistryKeyValue,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateSet('String', 'Binary', 'DWord', 'QWord', 'MultiString', 'ExpandString')]
-        [String]
-        $RegistryKeyValueType
-    )
-
-    $registryKeyValueAsString = [String]::Empty
-
-    if ($null -ne $RegistryKeyValue)
-    {
-        # For Binary type data, convert the received bytes back to a readable hex-string
-        if ($RegistryKeyValueType -eq 'Binary')
-        {
-            $RegistryKeyValue = Convert-ByteArrayToHexString -ByteArray $RegistryKeyValue
-        }
+    
+    <# 
+        .SYNOPSIS 
+            Removes the value of the specified registry key. 
+            This is a wrapper function for unit testing. 
         
-        if ($RegistryKeyValueType -ne 'MultiString')
-        {
-            $RegistryKeyValue = [String[]]@() + $RegistryKeyValue
-        }
-
-        if ($RegistryKeyValue.Count -eq 1 -and -not [String]::IsNullOrEmpty($RegistryKeyValue[0]))
-        {
-            $registryKeyValueAsString = $RegistryKeyValue[0].ToString()
-        }
-        elseif ($RegistryKeyValue.Count -gt 1)
-        {
-            $registryKeyValueAsString = "($($RegistryKeyValue -join ', '))"
-        }
-    }
-
-    return $registryKeyValueAsString
-}
-
-<#
-    .SYNOPSIS
-        Creates a new subkey with the specified name under the specified registry key.
-        This is a wrapper function for unit testing.
-
-    .PARAMETER ParentRegistryKey
-        The parent registry key to create the new subkey under.
-
-    .PARAMETER SubKeyName
-        The name of the new subkey to create.
-#>
-function New-RegistrySubKey
-{
-    [OutputType([Microsoft.Win32.RegistryKey])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.Win32.RegistryKey]
-        $ParentRegistryKey,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [String]
-        $SubKeyName
-    )
-
-    return $ParentRegistryKey.CreateSubKey($SubKeyName)
-}
-
-<#
-    .SYNOPSIS
-        Creates a new registry key at the specified registry key path.
-
-    .PARAMETER RegistryKeyPath
-        The path at which to create the registry key.
-        This path must include the registry drive.
-#>
-function New-RegistryKey
-{
-    [OutputType([Microsoft.Win32.RegistryKey])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [String]
-        $RegistryKeyPath
-    )
-
-    # Registry key names can contain forward slashes, so we can't use Split-Path here (it will split on /)
-    $indexOfLastBackslash = $RegistryKeyPath.LastIndexOf('\')
-    $parentRegistryKeyPath = $RegistryKeyPath.Substring(0, $indexOfLastBackslash)
-    $newRegistryKeyName = $RegistryKeyPath.Substring($indexOfLastBackslash + 1)
-
-    $parentRegistryKey = Get-RegistryKey -RegistryKeyPath $parentRegistryKeyPath -WriteAccessAllowed
-
-    if ($null -eq $parentRegistryKey)
-    {
-        # If the parent registry key does not exist, create it
-        $parentRegistryKey = New-RegistryKey -RegistryKeyPath $parentRegistryKeyPath
-    }
-
-    $newRegistryKey = New-RegistrySubKey -ParentRegistryKey $parentRegistryKey -SubKeyName $newRegistryKeyName
-
-    return $newRegistryKey
-}
-
-<#
-    .SYNOPSIS
-        Retrieves the name of the specified registry key.
-        This is a wrapper function for unit testing.
-
-    .PARAMETER RegistryKey
-        The registry key to retrieve the name of.
-#>
-function Get-RegistryKeyName
-{
-    [OutputType([String])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.Win32.RegistryKey]
-        $RegistryKey
-    )
-
-    return $RegistryKey.Name
-}
-
-<#
-    .SYNOPSIS
-        Converts the specified registry key value to a byte array for the Binary registry type.
-
-    .PARAMETER RegistryKeyValue
-        The registry key value to convert.
-#>
-function ConvertTo-Binary
-{
-    [OutputType([Byte[]])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter()]
-        [AllowNull()]
-        [String[]]
-        [AllowEmptyCollection()]
-        $RegistryKeyValue
-    )
-
-    if (($null -ne $RegistryKeyValue) -and ($RegistryKeyValue.Count -gt 1))
-    {
-        New-InvalidArgumentException -ArgumentName 'ValueData' -Message ($script:localizedData.ArrayNotAllowedForExpectedType -f 'Binary')
-    }
-
-    $binaryRegistryKeyValue = [Byte[]] @()
-
-    if (($null -ne $RegistryKeyValue) -and ($RegistryKeyValue.Count -eq 1) -and (-not [String]::IsNullOrEmpty($RegistryKeyValue[0])))
-    {
-        $singleRegistryKeyValue = $RegistryKeyValue[0]
-
-        if ($singleRegistryKeyValue.StartsWith('0x'))
-        {
-            $singleRegistryKeyValue = $singleRegistryKeyValue.Substring('0x'.Length)
-        }
-
-        if (($singleRegistryKeyValue.Length % 2) -ne 0)
-        {
-            $singleRegistryKeyValue = $singleRegistryKeyValue.PadLeft($singleRegistryKeyValue.Length + 1, '0')
-        }
-
-        try
-        {
-            for ($singleRegistryKeyValueIndex = 0 ; $singleRegistryKeyValueIndex -lt ($singleRegistryKeyValue.Length - 1) ; $singleRegistryKeyValueIndex = $singleRegistryKeyValueIndex + 2)
-            {
-                $binaryRegistryKeyValue += [Byte]::Parse($singleRegistryKeyValue.Substring($singleRegistryKeyValueIndex, 2), 'HexNumber')
-            }
-        }
-        catch
-        {
-            New-InvalidArgumentException -ArgumentName 'ValueData' -Message ($script:localizedData.BinaryDataNotInHexFormat -f $singleRegistryKeyValue)
+        .PARAMETER RegistryKey 
+            The registry key to remove the value of. 
+    #>
+    hidden [void] Remove_KeyValue([RegistryKey] $RegistryKey ) {
+        # If we are working with the Default Value delete it
+        if ($this.ValueName -eq [xRegistryValue]::LocalizedData.DefaultValueDisplayName) {
+            $RegistryKey.DeleteValue('')
+        } 
+        # Otherwise remove the specific value
+        else {
+            Remove-ItemProperty -Path "$($this.Hive):\$($this.Key)" -Name $this.ValueName -Force
         }
     }
-
-    return $binaryRegistryKeyValue
-}
-
-<#
-    .SYNOPSIS
-        Converts the specified registry key value to an Int32 for the DWord registry type.
-
-    .PARAMETER RegistryKeyValue
-        The registry key value to convert.
-#>
-function ConvertTo-DWord
-{
-    [OutputType([System.Int32])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter()]
-        [AllowNull()]
-        [String[]]
-        [AllowEmptyCollection()]
-        $RegistryKeyValue,
-
-        [Parameter()]
-        [Boolean]
-        $Hex = $false
-    )
-
-    if (($null -ne $RegistryKeyValue) -and ($RegistryKeyValue.Count -gt 1))
-    {
-        New-InvalidArgumentException -ArgumentName 'ValueData' -Message ($script:localizedData.ArrayNotAllowedForExpectedType -f 'Dword')
-    }
-
-    $dwordRegistryKeyValue = [System.Int32] 0
-
-    if (($null -ne $RegistryKeyValue) -and ($RegistryKeyValue.Count -eq 1) -and (-not [String]::IsNullOrEmpty($RegistryKeyValue[0])))
-    {
-        $singleRegistryKeyValue = $RegistryKeyValue[0]
-
-        if ($Hex)
-        {
-            if ($singleRegistryKeyValue.StartsWith('0x'))
-            {
-                $singleRegistryKeyValue = $singleRegistryKeyValue.Substring('0x'.Length)
-            }
-
-            $currentCultureInfo = [System.Globalization.CultureInfo]::CurrentCulture
-            $referenceValue = $null
-
-            if ([System.Int32]::TryParse($singleRegistryKeyValue, 'HexNumber', $currentCultureInfo, [Ref] $referenceValue))
-            {
-                $dwordRegistryKeyValue = $referenceValue
-            }
-            else
-            {
-                New-InvalidArgumentException -ArgumentName 'ValueData' -Message ($script:localizedData.DWordDataNotInHexFormat -f $singleRegistryKeyValue)
-            }
-        }
-        else
-        {
-            $dwordRegistryKeyValue = [System.Int32]::Parse($singleRegistryKeyValue)
-        }
-    }
-
-    return $dwordRegistryKeyValue
-}
-
-<#
-    .SYNOPSIS
-        Converts the specified registry key value to a string array for the MultiString registry type.
-
-    .PARAMETER RegistryKeyValue
-        The registry key value to convert.
-#>
-function ConvertTo-MultiString
-{
-    [OutputType([String[]])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter()]
-        [AllowNull()]
-        [String[]]
-        [AllowEmptyCollection()]
-        $RegistryKeyValue
-    )
-
-    $multiStringRegistryKeyValue = [String[]] @()
-
-    if (($null -ne $RegistryKeyValue) -and ($RegistryKeyValue.Length -gt 0))
-    {
-        $multiStringRegistryKeyValue = [String[]]$RegistryKeyValue
-    }
-
-    return $multiStringRegistryKeyValue
-}
-
-<#
-    .SYNOPSIS
-        Converts the specified registry key value to an Int64 for the QWord registry type.
-
-    .PARAMETER RegistryKeyValue
-        The registry key value to convert.
-#>
-function ConvertTo-QWord
-{
-    [OutputType([System.Int64])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter()]
-        [AllowNull()]
-        [String[]]
-        [AllowEmptyCollection()]
-        $RegistryKeyValue,
-
-        [Parameter()]
-        [Boolean]
-        $Hex = $false
-    )
-
-    if (($null -ne $RegistryKeyValue) -and ($RegistryKeyValue.Count -gt 1))
-    {
-        New-InvalidArgumentException -ArgumentName 'ValueData' -Message ($script:localizedData.ArrayNotAllowedForExpectedType -f 'Qword')
-    }
-
-    $qwordRegistryKeyValue = [System.Int64] 0
-
-    if (($null -ne $RegistryKeyValue) -and ($RegistryKeyValue.Count -eq 1) -and (-not [String]::IsNullOrEmpty($RegistryKeyValue[0])))
-    {
-        $singleRegistryKeyValue = $RegistryKeyValue[0]
-
-        if ($Hex)
-        {
-            if ($singleRegistryKeyValue.StartsWith('0x'))
-            {
-                $singleRegistryKeyValue = $singleRegistryKeyValue.Substring('0x'.Length)
-            }
-
-            $currentCultureInfo = [System.Globalization.CultureInfo]::CurrentCulture
-            $referenceValue = $null
-
-            if ([System.Int64]::TryParse($singleRegistryKeyValue, 'HexNumber', $currentCultureInfo, [Ref] $referenceValue))
-            {
-                $qwordRegistryKeyValue = $referenceValue
-            }
-            else
-            {
-                New-InvalidArgumentException -ArgumentName 'ValueData' -Message ($script:localizedData.QWordDataNotInHexFormat -f $singleRegistryKeyValue)
-            }
-        }
-        else
-        {
-            $qwordRegistryKeyValue = [System.Int64]::Parse($singleRegistryKeyValue)
-        }
-    }
-
-    return $qwordRegistryKeyValue
-}
-
-<#
-    .SYNOPSIS
-        Converts the specified registry key value to a string for the String or ExpandString registry types.
-
-    .PARAMETER RegistryKeyValue
-        The registry key value to convert.
-#>
-function ConvertTo-String
-{
-    [OutputType([String])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter()]
-        [AllowNull()]
-        [String[]]
-        [AllowEmptyCollection()]
-        $RegistryKeyValue
-    )
-
-    if (($null -ne $RegistryKeyValue) -and ($RegistryKeyValue.Count -gt 1))
-    {
-        New-InvalidArgumentException -ArgumentName 'ValueData' -Message ($script:localizedData.ArrayNotAllowedForExpectedType -f 'String or ExpandString')
-    }
-
-    $registryKeyValueAsString = [String]::Empty
-
-    if (($null -ne $RegistryKeyValue) -and ($RegistryKeyValue.Count -eq 1))
-    {
-        $registryKeyValueAsString = [String]$RegistryKeyValue[0]
-    }
-
-    return $registryKeyValueAsString
-}
-
-<#
-    .SYNOPSIS
-        Sets the specified registry key value with the specified name to the specified value.
-        This is a wrapper function for unit testing.
-
-    .PARAMETER RegistryKeyName
-        The name of the registry key that the value to set is under.
-
-    .PARAMETER RegistryKeyValueName
-        The name of the registry key value to set.
-
-    .PARAMETER RegistryKeyValue
-        The new value to set the registry key value to.
-
-    .PARAMETER RegistryKeyValueType
-        The type of the new value to set the registry key value to.
-#>
-function Set-RegistryKeyValue
-{
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [String]
-        $RegistryKeyName,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNull()]
-        [String]
-        [AllowEmptyString()]
-        $RegistryKeyValueName,
-
-        [Parameter(Mandatory = $true)]
-        [Object]
-        [AllowNull()]
-        $RegistryKeyValue,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateSet('String', 'Binary', 'DWord', 'QWord', 'MultiString', 'ExpandString')]
-        [String]
-        $ValueType
-    )
-
-    if ($ValueType -eq 'Binary')
-    {
-        $RegistryKeyValue = [Byte[]]$RegistryKeyValue
-    }
-    elseif ($ValueType -eq 'MultiString')
-    {
-        $RegistryKeyValue = [String[]]$RegistryKeyValue
-    }
-
-    $null = [Microsoft.Win32.Registry]::SetValue($RegistryKeyName, $RegistryKeyValueName, $RegistryKeyValue, $ValueType)
-}
-
-<#
-    .SYNOPSIS
-        Tests if the actual registry key value matches the expected registry key value.
-
-    .PARAMETER ExpectedRegistryKeyValue
-        The expected registry key value to test against.
-
-    .PARAMETER ActualRegistryKeyValue
-        The actual registry key value to test.
-
-    .PARAMETER RegistryKeyValueType
-        The type of the registry key values.
-#>
-function Test-RegistryKeyValuesMatch
-{
-    [OutputType([Boolean])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [Object]
-        [AllowNull()]
-        $ExpectedRegistryKeyValue,
-
-        [Parameter(Mandatory = $true)]
-        [Object]
-        [AllowNull()]
-        $ActualRegistryKeyValue,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateSet('String', 'Binary', 'DWord', 'QWord', 'MultiString', 'ExpandString')]
-        [String]
-        $RegistryKeyValueType
-    )
-
-    $registryKeyValuesMatch = $true
-
-    if ($RegistryKeyValueType -eq 'Multistring' -or $RegistryKeyValueType -eq 'Binary')
-    {
-        if ($null -eq $ExpectedRegistryKeyValue)
-        {
-            $ExpectedRegistryKeyValue = @()
-        }
-
-        if ($null -eq $ActualRegistryKeyValue)
-        {
-            $ActualRegistryKeyValue = @()
-        }
-
-        $registryKeyValuesMatch = $null -eq (Compare-Object -ReferenceObject $ExpectedRegistryKeyValue -DifferenceObject $ActualRegistryKeyValue)
-    }
-    else
-    {
-        if ($null -eq $ExpectedRegistryKeyValue)
-        {
-            $ExpectedRegistryKeyValue = ''
-        }
-
-        if ($null -eq $ActualRegistryKeyValue)
-        {
-            $ActualRegistryKeyValue = ''
-        }
-
-        $registryKeyValuesMatch = $ExpectedRegistryKeyValue -ieq $ActualRegistryKeyValue
-    }
-
-    return $registryKeyValuesMatch
-}
-
-<#
-    .SYNOPSIS
-        Removes the default value of the specified registry key.
-        This is a wrapper function for unit testing.
-        
-    .PARAMETER RegistryKey
-        The registry key to remove the default value of. 
-#>
-function Remove-DefaultRegistryKeyValue
-{
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.Win32.RegistryKey]
-        $RegistryKey
-    )
-
-    $null = $RegistryKey.DeleteValue('')
-}
-
-<#
-    .SYNOPSIS
-        Retrieves the number of subkeys under the specified registry key.
-        This is a wrapper function for unit testing.
-
-    .PARAMETER RegistryKey
-        The registry key to retrieve the subkeys of.
-#>
-function Get-RegistryKeySubKeyCount
-{
-    [OutputType([Int])]
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.Win32.RegistryKey]
-        $RegistryKey
-    )
-
-    return $RegistryKey.SubKeyCount
 }
