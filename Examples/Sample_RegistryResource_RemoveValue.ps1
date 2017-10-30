@@ -5,7 +5,7 @@
 #>
 Configuration Sample_RegistryResource_RemoveValue
 {
-    Import-DscResource -ModuleName 'PsDscClassResources_Dev'
+    Import-DscResource -ModuleName 'PsDscClassResourcesDev'
 
     Node localhost
     {

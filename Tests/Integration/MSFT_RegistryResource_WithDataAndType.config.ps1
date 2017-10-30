@@ -34,7 +34,7 @@ Configuration $ConfigurationName
         $ValueData
     )
 
-    Import-DscResource -ModuleName 'PsDscClassResources_Dev'
+    Import-DscResource -ModuleName 'PsDscClassResourcesDev'
 
     Node localhost
     {
