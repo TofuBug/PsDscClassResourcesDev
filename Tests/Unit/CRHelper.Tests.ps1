@@ -1,0 +1,197 @@
+using module ..\..\DscResources\CRHelper.psm1 
+
+$errorActionPreference = 'Stop'
+Set-StrictMode -Version 'Latest'
+
+Describe 'CRHelper Unit Tests' {
+    BeforeAll {
+    }
+
+    InModuleScope 'CRHelper' {
+        Describe 'Test-IsNanoServer' {
+            $testComputerInfoNanoServer = @{
+                OsProductType = 'Server'
+                OsServerLevel = 'NanoServer'
+            }
+
+            $testComputerInfoServerNotNano = @{
+                OsProductType = 'Server'
+                OsServerLevel = 'NotNano'
+            }
+
+            $testComputerInfoNotServer = @{
+                OsProductType = 'NotServer'
+                OsServerLevel = 'NotNano'
+            }
+
+            class MockCRHelper : CRHelper 
+            {
+                static [bool] Test_CommandExists([String] $Name) { 
+                    return $true}
+            }
+
+            Mock -CommandName 'Get-ComputerInfo' -MockWith { 
+                return $testComputerInfoNanoServer }
+
+            Context 'Get-ComputerInfo command exists and succeeds' {
+                Context 'Computer OS type is Server and OS server level is NanoServer' {
+                    It 'Should not throw' {
+                        { $null = [MockCRHelper]::IsNanoServer } | Should Not Throw
+                    }
+
+                    It 'Should test if MockCRHelper is a CRHelper Class' {
+                        [type]([MockCRHelper].BaseType) | should BeOfType [Type]([CRHelper].GetType())
+                    }
+
+                    It 'Should retrieve the computer info' {
+                        Assert-MockCalled -CommandName 'Get-ComputerInfo' -Exactly 1 -Scope 'Context'
+                    }
+
+                    It 'Should return true' {
+                        [MockCRHelper]::IsNanoServer | Should Be $true
+                    }
+                }
+
+                Context 'Computer OS type is Server and OS server level is not NanoServer' {
+                    Mock -CommandName 'Get-ComputerInfo' -MockWith { return $testComputerInfoServerNotNano }
+                    
+                    It 'Should not throw' {
+                        { $null = [MockCRHelper]::IsNanoServer } | Should Not Throw
+                    }
+
+                    It 'Should test if the Get-ComputerInfo command exists' {
+                        $testCommandExistsParameterFilter = {
+                            return $Name -eq 'Get-ComputerInfo'
+                        }
+
+                        Assert-MockCalled -CommandName 'Test-CommandExists' -ParameterFilter $testCommandExistsParameterFilter -Exactly 1 -Scope 'Context'
+                    }
+
+                    It 'Should retrieve the computer info' {
+                        Assert-MockCalled -CommandName 'Get-ComputerInfo' -Exactly 1 -Scope 'Context'
+                    }
+
+                    It 'Should return false' {
+                        [MockCRHelper]::IsNanoServer | Should Be $false
+                    }
+                }
+
+                Context 'Computer OS type is not Server' {
+                    Mock -CommandName 'Get-ComputerInfo' -MockWith { return $testComputerInfoNotServer }
+
+                    It 'Should not throw' {
+                        { $null = [MockCRHelper]::IsNanoServer } | Should Not Throw
+                    }
+
+                    It 'Should test if the Get-ComputerInfo command exists' {
+                        $testCommandExistsParameterFilter = {
+                            return $Name -eq 'Get-ComputerInfo'
+                        }
+
+                        Assert-MockCalled -CommandName 'Test-CommandExists' -ParameterFilter $testCommandExistsParameterFilter -Exactly 1 -Scope 'Context'
+                    }
+
+                    It 'Should retrieve the computer info' {
+                        Assert-MockCalled -CommandName 'Get-ComputerInfo' -Exactly 1 -Scope 'Context'
+                    }
+
+                    It 'Should return false' {
+                        [MockCRHelper]::IsNanoServer | Should Be $false
+                    }
+                }
+            }
+
+            Context 'Get-ComputerInfo command exists but throws an error and returns null' {
+                Mock -CommandName 'Get-ComputerInfo' -MockWith { return $null }
+
+                It 'Should not throw' {
+                    { $null = [MockCRHelper]::IsNanoServer } | Should Not Throw
+                }
+
+                It 'Should test if the Get-ComputerInfo command exists' {
+                    $testCommandExistsParameterFilter = {
+                        return $Name -eq 'Get-ComputerInfo'
+                    }
+
+                    Assert-MockCalled -CommandName 'Test-CommandExists' -ParameterFilter $testCommandExistsParameterFilter -Exactly 1 -Scope 'Context'
+                }
+
+                It 'Should retrieve the computer info' {
+                    Assert-MockCalled -CommandName 'Get-ComputerInfo' -Exactly 1 -Scope 'Context'
+                }
+
+                It 'Should return false' {
+                    [MockCRHelper]::IsNanoServer | Should Be $false
+                }
+            }
+
+            Context 'Get-ComputerInfo command does not exist' {
+                Mock -CommandName 'Test-CommandExists' -MockWith { return $false }
+
+                It 'Should not throw' {
+                    { $null = [MockCRHelper]::IsNanoServer } | Should Not Throw
+                }
+
+                It 'Should test if the Get-ComputerInfo command exists' {
+                    $testCommandExistsParameterFilter = {
+                        return $Name -eq 'Get-ComputerInfo'
+                    }
+
+                    Assert-MockCalled -CommandName 'Test-CommandExists' -ParameterFilter $testCommandExistsParameterFilter -Exactly 1 -Scope 'Context'
+                }
+
+                It 'Should not attempt to retrieve the computer info' {
+                    Assert-MockCalled -CommandName 'Get-ComputerInfo' -Exactly 0 -Scope 'Context'
+                }
+
+                It 'Should return false' {
+                    [MockCRHelper]::IsNanoServer | Should Be $false
+                }
+            }
+        }
+
+        Describe 'Test-CommandExists' {
+            $testCommandName = 'TestCommandName'
+
+            Mock -CommandName 'Get-Command' -MockWith { return $Name }
+
+            Context 'Get-Command returns the command' {
+                It 'Should not throw' {
+                    { $null = Test-CommandExists -Name $testCommandName } | Should Not Throw
+                }
+
+                It 'Should retrieve the command with the specified name' {
+                    $getCommandParameterFilter = {
+                        return $Name -eq $testCommandName
+                    }
+
+                    Assert-MockCalled -CommandName 'Get-Command' -ParameterFilter $getCommandParameterFilter -Exactly 1 -Scope 'Context'
+                }
+
+                It 'Should return true' {
+                    Test-CommandExists -Name $testCommandName | Should Be $true
+                }
+            }
+
+            Context 'Get-Command returns null' {
+                Mock -CommandName 'Get-Command' -MockWith { return $null }
+
+                It 'Should not throw' {
+                    { $null = Test-CommandExists -Name $testCommandName } | Should Not Throw
+                }
+
+                It 'Should retrieve the command with the specified name' {
+                    $getCommandParameterFilter = {
+                        return $Name -eq $testCommandName
+                    }
+
+                    Assert-MockCalled -CommandName 'Get-Command' -ParameterFilter $getCommandParameterFilter -Exactly 1 -Scope 'Context'
+                }
+
+                It 'Should return false' {
+                    Test-CommandExists -Name $testCommandName | Should Be $false
+                }
+            }
+        }
+    }
+}
