@@ -1,4 +1,4 @@
-﻿class CommonResourceHelper {   
+class CommonResourceHelper {   
 
     static [string] $UICulture = $PSUICulture
     static [bool] $IsNanoServer = [CommonResourceHelper]::Test_IsNanoServer()
