@@ -16,6 +16,7 @@ class CRHelper
     #>
     hidden static [bool] Test_IsNanoServer() 
     {
+
         $NanoServer = $false        
         if ([CRHelper]::Test_CommandExists('Get-ComputerInfo')) 
         {
@@ -39,7 +40,13 @@ class CRHelper
         .PARAMETER Name
             The name of the command to test for.
     #>
-    static [bool] Test_CommandExists([String] $Name) { return ($null -ne (Get-Command -Name $Name  -ErrorAction 'SilentlyContinue' )) }
+    static [bool] Test_CommandExists(
+        [String] $Name
+    ) 
+    {
+        
+        return ($null -ne (Get-Command -Name $Name  -ErrorAction 'SilentlyContinue' )) 
+    }
     
     <#
         .SYNOPSIS
@@ -51,8 +58,12 @@ class CRHelper
         .PARAMETER ArgumentName
             The name of the invalid argument that is causing this error to be thrown
     #>
-    static [void] New_InvalidArgumentException([String]$Message, [String] $ArgumentName) 
-    {    
+    static [void] New_InvalidArgumentException(
+        [String]$Message, 
+        [String] $ArgumentName
+    ) 
+    {   
+
         $argumentException = New-Object -TypeName 'ArgumentException' -ArgumentList @($Message, $ArgumentName)
         $newObjectParams = @{
             TypeName = 'System.Management.Automation.ErrorRecord'
@@ -72,8 +83,12 @@ class CRHelper
         .PARAMETER ErrorRecord
             The error record containing the exception that is causing this terminating error
     #>
-    static [void] New_InvalidOperationException([String] $Message, [ErrorRecord] $ErrorRecord) 
-    {    
+    static [void] New_InvalidOperationException(
+        [String] $Message, 
+        [ErrorRecord] $ErrorRecord
+    ) 
+    {   
+
         if ($null -eq $Message) 
         {
             $invalidOperationException = New-Object -TypeName 'InvalidOperationException'
@@ -106,8 +121,11 @@ class CRHelper
                 For Service: MSFT_ServiceResource
                 For Registry: MSFT_RegistryResource
     #>
-    static [hashtable] Get_LocalizedData([String] $ResourceName) 
+    static [hashtable] Get_LocalizedData(
+        [String] $ResourceName
+    ) 
     { 
+
         Write-Verbose "ResourceName: $ResourceName"
         $resourceDirectory = Join-Path -Path $PSScriptRoot -ChildPath $ResourceName
         $localizedStringFileLocation = Join-Path -Path $resourceDirectory -ChildPath ([CRHelper]::UICulture)
