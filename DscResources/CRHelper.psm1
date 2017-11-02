@@ -1,4 +1,5 @@
 using namespace System.Management.Automation
+using namespace Microsoft.PowerShell.Commands
 
 <#
     .SYNOPSIS
@@ -8,29 +9,62 @@ using namespace System.Management.Automation
 class CRHelper 
 {   
     static [string] $UICulture = $PSUICulture
-    static [bool] $IsNanoServer = [CRHelper]::Test_IsNanoServer()
+    static [bool] $IsNanoServer = [CRHelper]::_TestIsNanoServerFunc.Invoke([CRHelper]::_GetComputerInfoFunc.Invoke())
+
+    hidden static [Func[string,bool]] $_TestCommandExistsFunc
+    hidden static [Func[ComputerInfo]] $_GetComputerInfoFunc
+    hidden static [Func[ComputerInfo,bool]] $_TestIsNanoServerFunc
+
+    hidden static CRHelper()
+    {
+        [CRHelper]::ResetFuncsToNormal()
+    }
  
     <#
         .SYNOPSIS
-            Tests if the current machine is a Nano server.
+            Helper Function to Reset Func Delegates to normal for testing
     #>
-    hidden static [bool] Test_IsNanoServer() 
+    hidden static [void] ResetFuncsToNormal()
     {
+        [CRHelper]::$_TestCommandExistsFunc = { param([string] $Command) return [CRHelper]::Test_CommandExists($Command) }
+        [CRHelper]::$_GetComputerInfoFunc = { return [CRHelper]::Get_ComputerInfo() }
+        [CRHelper]::$_TestIsNanoServerFunc = { param([ComputerInfo] $computerInfo) return [CRHelper]::Test_IsNanoServer($computerInfo )}
+    }
 
+    <#
+        .SYNOPSIS
+            Tests if the current machine is a Nano server.
+
+        .PARAMETER computerInfo
+            ComputerInfo Object
+    #>
+    hidden static [bool] Test_IsNanoServer([ComputerInfo] $computerInfo) 
+    {
         $NanoServer = $false        
-        if ([CRHelper]::Test_CommandExists('Get-ComputerInfo')) 
+        if ($null -ne $computerInfo) 
         {
-            $computerInfo = Get-ComputerInfo -ErrorAction 'SilentlyContinue'    
-            if ($null -ne $computerInfo) 
+            $computerIsServer = 'Server' -ieq $computerInfo.OsProductType    
+            if ($computerIsServer) 
             {
-                $computerIsServer = 'Server' -ieq $computerInfo.OsProductType    
-                if ($computerIsServer) 
-                {
-                    $NanoServer = 'NanoServer' -ieq $computerInfo.OsServerLevel
-                }
+                $NanoServer = 'NanoServer' -ieq $computerInfo.OsServerLevel
             }
         }    
         return $NanoServer
+    }
+
+    <#
+        .SYNOPSIS
+            Gets Computer Info broken out for unit testing and mocking.
+    #>
+
+    hidden static [ComputerInfo] Get_ComputerInfo()
+    {
+        $computerInfo = $null
+        if ([CRHelper]::_Test_CommandExists.Invoke('Get-ComputerInfo'))
+        {
+            $computerInfo = Get-ComputerInfo -ErrorAction 'SilentlyContinue'    
+        }
+        return $computerInfo
     }
 
     <#
@@ -44,7 +78,6 @@ class CRHelper
         [String] $Name
     ) 
     {
-        
         return ($null -ne (Get-Command -Name $Name  -ErrorAction 'SilentlyContinue' )) 
     }
     
