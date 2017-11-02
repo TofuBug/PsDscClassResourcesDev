@@ -1,3 +1,4 @@
+using namespace Microsoft.PowerShell.Commands
 using module ..\..\DscResources\CRHelper.psm1 
 
 $errorActionPreference = 'Stop'
@@ -24,11 +25,11 @@ Describe 'CRHelper Unit Tests' {
                 OsServerLevel = 'NotNano'
             }
 
-            class MockCRHelper : CRHelper 
+            class StubCRHelper : CRHelper 
             {
-                static [bool] Test_CommandExists([String] $Name) { 
-                    return $true}
+                ()
             }
+
 
             Mock -CommandName 'Get-ComputerInfo' -MockWith { 
                 return $testComputerInfoNanoServer }
@@ -41,10 +42,6 @@ Describe 'CRHelper Unit Tests' {
 
                     It 'Should test if MockCRHelper is a CRHelper Class' {
                         [type]([MockCRHelper].BaseType) | should BeOfType [Type]([CRHelper].GetType())
-                    }
-
-                    It 'Should retrieve the computer info' {
-                        Assert-MockCalled -CommandName 'Get-ComputerInfo' -Exactly 1 -Scope 'Context'
                     }
 
                     It 'Should return true' {
