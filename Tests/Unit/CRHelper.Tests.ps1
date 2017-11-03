@@ -9,43 +9,36 @@ Describe 'CRHelper Unit Tests' {
     }
 
     InModuleScope 'CRHelper' {
+
+
         Describe 'Test-IsNanoServer' {
-            $testComputerInfoNanoServer = @{
-                OsProductType = 'Server'
-                OsServerLevel = 'NanoServer'
-            }
+            $testComputerInfoNanoServer = [ComputerInfo]::new()
+            $testComputerInfoNanoServer.OsProductType = [ProductType]::Server
+            $testComputerInfoNanoServer.OsServerLevel = [ServerLevel]::NanoServer
 
-            $testComputerInfoServerNotNano = @{
-                OsProductType = 'Server'
-                OsServerLevel = 'NotNano'
-            }
+            $testComputerInfoServerNotNano = [ComputerInfo]::new()
+            $testComputerInfoServerNotNano.OsProductType = [ProductType]::Server
+            $testComputerInfoServerNotNano.OsServerLevel = [ServerLevel]::FullServer
 
-            $testComputerInfoNotServer = @{
-                OsProductType = 'NotServer'
-                OsServerLevel = 'NotNano'
-            }
-
-            class StubCRHelper : CRHelper 
-            {
-                ()
+            $testComputerInfoNotServer = [ComputerInfo]::new()
+            $testComputerInfoNotServer.OsProductType = [ProductType]::WorkStation
+            $testComputerInfoNotServer.OsServerLevel = [ServerLevel]::Unknown
             }
 
 
             Mock -CommandName 'Get-ComputerInfo' -MockWith { 
                 return $testComputerInfoNanoServer }
 
+            [CRHelper]::_TestCommandExists = { param([string] $Command) return $true}
+
             Context 'Get-ComputerInfo command exists and succeeds' {
                 Context 'Computer OS type is Server and OS server level is NanoServer' {
                     It 'Should not throw' {
-                        { $null = [MockCRHelper]::IsNanoServer } | Should Not Throw
-                    }
-
-                    It 'Should test if MockCRHelper is a CRHelper Class' {
-                        [type]([MockCRHelper].BaseType) | should BeOfType [Type]([CRHelper].GetType())
+                        { $null = [CRHelper]::IsNanoServer } | Should Not Throw
                     }
 
                     It 'Should return true' {
-                        [MockCRHelper]::IsNanoServer | Should Be $true
+                        [CRHelper]::IsNanoServer | Should Be $true
                     }
                 }
 
@@ -69,7 +62,7 @@ Describe 'CRHelper Unit Tests' {
                     }
 
                     It 'Should return false' {
-                        [MockCRHelper]::IsNanoServer | Should Be $false
+                        [CRHelper]::IsNanoServer | Should Be $false
                     }
                 }
 
@@ -93,10 +86,12 @@ Describe 'CRHelper Unit Tests' {
                     }
 
                     It 'Should return false' {
-                        [MockCRHelper]::IsNanoServer | Should Be $false
+                        [CRHelper]::IsNanoServer | Should Be $false
                     }
                 }
             }
+
+            [CRHelper]::ResetFuncsToNormal()
 
             Context 'Get-ComputerInfo command exists but throws an error and returns null' {
                 Mock -CommandName 'Get-ComputerInfo' -MockWith { return $null }
@@ -191,4 +186,3 @@ Describe 'CRHelper Unit Tests' {
             }
         }
     }
-}

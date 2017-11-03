@@ -9,11 +9,11 @@ using namespace Microsoft.PowerShell.Commands
 class CRHelper 
 {   
     static [string] $UICulture = $PSUICulture
-    static [bool] $IsNanoServer = [CRHelper]::_TestIsNanoServerFunc.Invoke([CRHelper]::_GetComputerInfoFunc.Invoke())
+    static [bool] $IsNanoServer = [CRHelper]::Test_IsNanoServer([CRHelper]::Get_ComputerInfo())
 
-    hidden static [Func[string,bool]] $_TestCommandExistsFunc
-    hidden static [Func[ComputerInfo]] $_GetComputerInfoFunc
-    hidden static [Func[ComputerInfo,bool]] $_TestIsNanoServerFunc
+    hidden static [Func[string,bool]] $TestCommandExistsFunc
+    hidden static [Func[ComputerInfo]] $GetComputerInfoFunc
+    hidden static [Func[ComputerInfo,bool]] $TestIsNanoServerFunc
 
     hidden static CRHelper()
     {
@@ -26,9 +26,9 @@ class CRHelper
     #>
     hidden static [void] ResetFuncsToNormal()
     {
-        [CRHelper]::$_TestCommandExistsFunc = { param([string] $Command) return [CRHelper]::Test_CommandExists($Command) }
-        [CRHelper]::$_GetComputerInfoFunc = { return [CRHelper]::Get_ComputerInfo() }
-        [CRHelper]::$_TestIsNanoServerFunc = { param([ComputerInfo] $computerInfo) return [CRHelper]::Test_IsNanoServer($computerInfo )}
+        [CRHelper]::TestCommandExistsFunc = $null
+        [CRHelper]::GetComputerInfoFunc = $null
+        [CRHelper]::TestIsNanoServerFunc = $null
     }
 
     <#
@@ -39,6 +39,20 @@ class CRHelper
             ComputerInfo Object
     #>
     hidden static [bool] Test_IsNanoServer([ComputerInfo] $computerInfo) 
+    {
+        # If we have an alternate Func call that instead (Allows for Unit Testinga)
+        if ($null -ne [CRHelper]::TestIsNanoServerFunc) 
+        {
+            return [CRHelper]::TestIsNanoServerFunc.Invoke($computerInfo)
+        }
+        return (
+                    $null -ne $computerInfo -and 
+                    $computerInfo.OsProductType -eq [ProductType]::Server -and
+                    $computerInfo.OsServerLevel -eq [ServerLevel]::NanoServer
+               )        
+    }
+
+    <# hidden static [bool] Test_IsNanoServer([ComputerInfo] $computerInfo) 
     {
         $NanoServer = $false        
         if ($null -ne $computerInfo) 
@@ -51,7 +65,7 @@ class CRHelper
         }    
         return $NanoServer
     }
-
+ #>
     <#
         .SYNOPSIS
             Gets Computer Info broken out for unit testing and mocking.
@@ -59,6 +73,11 @@ class CRHelper
 
     hidden static [ComputerInfo] Get_ComputerInfo()
     {
+        # If we have an alternate Func call that instead (Allows for Unit Testinga)
+        if ($null -ne [CRHelper]::GetComputerInfoFunc) 
+        {
+            return [CRHelper]::GetComputerInfoFunc.Invoke()
+        }
         $computerInfo = $null
         if ([CRHelper]::_Test_CommandExists.Invoke('Get-ComputerInfo'))
         {
@@ -78,6 +97,11 @@ class CRHelper
         [String] $Name
     ) 
     {
+        # If we have an alternate Func call that instead (Allows for Unit Testinga)
+        if ($null -ne [CRHelper]::TestCommandExistsFunc) 
+        {
+            return [CRHelper]::TestCommandExistsFunc.Invoke($Name)
+        }
         return ($null -ne (Get-Command -Name $Name  -ErrorAction 'SilentlyContinue' )) 
     }
     
@@ -121,7 +145,6 @@ class CRHelper
         [ErrorRecord] $ErrorRecord
     ) 
     {   
-
         if ($null -eq $Message) 
         {
             $invalidOperationException = New-Object -TypeName 'InvalidOperationException'
