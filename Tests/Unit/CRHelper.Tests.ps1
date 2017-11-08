@@ -9,7 +9,6 @@ Describe 'CRHelper Unit Tests' {
     BeforeAll {
     }
 
-<<<<<<< HEAD
         Describe 'Test-IsNanoServer' {
             BeforeAll {
                 # Setup class to mock ComputerInfo (Properties are only internally settable)
@@ -34,24 +33,6 @@ Describe 'CRHelper Unit Tests' {
 
             $testComputerInfoNotServer.OsProductType = [ProductType]::WorkStation
             $testComputerInfoNotServer.OsServerLevel = [ServerLevel]::Unknown
-=======
-    InModuleScope 'CRHelper' {
-
-        Describe 'Test_IsNanoServer' {
-
-            [CRHelper]::ResetFuncsToNormal()
-            $testComputerInfoNanoServer = [Microsoft.PowerShell.Commands.ComputerInfo]::new()
-            $testComputerInfoNanoServer.OsProductType = [Microsoft.PowerShell.Commands.ProductType]::Server
-            $testComputerInfoNanoServer.OsServerLevel = [Microsoft.PowerShell.Commands.ServerLevel]::NanoServer
-
-            $testComputerInfoServerNotNano = [Microsoft.PowerShell.Commands.ComputerInfo]::new()
-            $testComputerInfoServerNotNano.OsProductType = [Microsoft.PowerShell.Commands.ProductType]::Server
-            $testComputerInfoServerNotNano.OsServerLevel = [Microsoft.PowerShell.Commands.ServerLevel]::FullServer
-
-            $testComputerInfoNotServer = [Microsoft.PowerShell.Commands.ComputerInfo]::new()
-            $testComputerInfoNotServer.OsProductType = [Microsoft.PowerShell.Commands.ProductType]::WorkStation
-            $testComputerInfoNotServer.OsServerLevel = [Microsoft.PowerShell.Commands.ServerLevel]::Unknown
->>>>>>> 2948b9ccfc7bbee75c290c5baa572f54a7fefb63
 
             Context 'Get-ComputerInfo command exists and succeeds' {
                 
@@ -71,11 +52,7 @@ Describe 'CRHelper Unit Tests' {
 
                     Context 'Only Get_ComputerInfo has been "Mocked"' {
 
-<<<<<<< HEAD
                         It 'GetComputerInfoFunc Should NOT be null (It has been mocked)' {
-=======
-                        It 'GetComputerInfoFunc Should NOT be null (It has been mocked' {
->>>>>>> 2948b9ccfc7bbee75c290c5baa572f54a7fefb63
                             [CRHelper]::GetComputerInfoFunc | Should Not Be $null
                         }
 
@@ -88,15 +65,9 @@ Describe 'CRHelper Unit Tests' {
                         }
                     }
                 }
-<<<<<<< HEAD
 
                 Context 'Computer OS type is Server and OS server level is not NanoServer' {
 
-=======
-
-                Context 'Computer OS type is Server and OS server level is not NanoServer' {
-
->>>>>>> 2948b9ccfc7bbee75c290c5baa572f54a7fefb63
                     [CRHelper]::GetComputerInfoFunc = { return $testComputerInfoServerNotNano }
                     
                     It 'Should not throw' {
@@ -109,11 +80,7 @@ Describe 'CRHelper Unit Tests' {
 
                     Context 'Only Get_ComputerInfo has been "Mocked"' {
 
-<<<<<<< HEAD
                         It 'GetComputerInfoFunc Should NOT be null (It has been mocked)' {
-=======
-                        It 'GetComputerInfoFunc Should NOT be null (It has been mocked' {
->>>>>>> 2948b9ccfc7bbee75c290c5baa572f54a7fefb63
                             [CRHelper]::GetComputerInfoFunc | Should Not Be $null
                         }
 
@@ -126,7 +93,6 @@ Describe 'CRHelper Unit Tests' {
                         }
                     }
                 }
-<<<<<<< HEAD
 
                 Context 'Computer OS type is not Server' {
 
@@ -134,15 +100,6 @@ Describe 'CRHelper Unit Tests' {
 
                     It 'Should not throw' {
                         { $null = [CRHelper]::Test_IsNanoServer() } | Should Not Throw
-=======
-
-                Context 'Computer OS type is not Server' {
-
-                    [CRHelper]::GetComputerInfoFunc = { return $testComputerInfoNotServer }
-
-                    It 'Should not throw' {
-                        { $null = [CRHelper]::IsNanoServer } | Should Not Throw
->>>>>>> 2948b9ccfc7bbee75c290c5baa572f54a7fefb63
                     }
 
                     It 'Should return false' {
@@ -151,11 +108,7 @@ Describe 'CRHelper Unit Tests' {
 
                     Context 'Only Get_ComputerInfo has been "Mocked"' {
 
-<<<<<<< HEAD
                         It 'GetComputerInfoFunc Should NOT be null (It has been mocked)' {
-=======
-                        It 'GetComputerInfoFunc Should NOT be null (It has been mocked' {
->>>>>>> 2948b9ccfc7bbee75c290c5baa572f54a7fefb63
                             [CRHelper]::GetComputerInfoFunc | Should Not Be $null
                         }
 
@@ -225,11 +178,7 @@ Describe 'CRHelper Unit Tests' {
                         [CRHelper]::TestIsNanoServerFunc | Should Be $null
                     }
                 }        
-<<<<<<< HEAD
                 [CRHelper]::ResetFuncsToNormal()                                
-=======
-                [CRHelerp]::ResetFuncsToNormal()                                
->>>>>>> 2948b9ccfc7bbee75c290c5baa572f54a7fefb63
             }
         }
 
@@ -279,8 +228,4 @@ Describe 'CRHelper Unit Tests' {
                 }
             }
         }
-<<<<<<< HEAD
-=======
-    }
->>>>>>> 2948b9ccfc7bbee75c290c5baa572f54a7fefb63
 }

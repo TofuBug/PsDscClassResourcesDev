@@ -11,23 +11,12 @@ class CRHelper
     static [string] $UICulture = $PSUICulture
     static [bool] $IsNanoServer = [CRHelper]::Test_IsNanoServer([CRHelper]::Get_ComputerInfo())
 
-<<<<<<< HEAD
-    hidden static [Func[string,bool]] $TestCommandExistsFunc = $null
-    hidden static [Func[ComputerInfo]] $GetComputerInfoFunc = $null
-    hidden static [Func[ComputerInfo,bool]] $TestIsNanoServerFunc = $null
-=======
     # Delegate hooks for unit testing
     #
     # To PROPERRLY test this class you MUST Assert that the Delegates you DO NOT override are null
     hidden static [Func[string,bool]] $TestCommandExistsFunc = $null
-    hidden static [Func[Microsoft.PowerShell.Commands.ComputerInfo]] $GetComputerInfoFunc = $null
-    hidden static [Func[Microsoft.PowerShell.Commands.ComputerInfo,bool]] $TestIsNanoServerFunc = $null
-
-    hidden static CRHelper()
-    {
-        [CRHelper]::ResetFuncsToNormal()
-    }
->>>>>>> 2948b9ccfc7bbee75c290c5baa572f54a7fefb63
+    hidden static [Func[ComputerInfo]] $GetComputerInfoFunc = $null
+    hidden static [Func[ComputerInfo,bool]] $TestIsNanoServerFunc = $null
  
     <#
         .SYNOPSIS
