@@ -11,9 +11,23 @@ class CRHelper
     static [string] $UICulture = $PSUICulture
     static [bool] $IsNanoServer = [CRHelper]::Test_IsNanoServer([CRHelper]::Get_ComputerInfo())
 
+<<<<<<< HEAD
     hidden static [Func[string,bool]] $TestCommandExistsFunc = $null
     hidden static [Func[ComputerInfo]] $GetComputerInfoFunc = $null
     hidden static [Func[ComputerInfo,bool]] $TestIsNanoServerFunc = $null
+=======
+    # Delegate hooks for unit testing
+    #
+    # To PROPERRLY test this class you MUST Assert that the Delegates you DO NOT override are null
+    hidden static [Func[string,bool]] $TestCommandExistsFunc = $null
+    hidden static [Func[Microsoft.PowerShell.Commands.ComputerInfo]] $GetComputerInfoFunc = $null
+    hidden static [Func[Microsoft.PowerShell.Commands.ComputerInfo,bool]] $TestIsNanoServerFunc = $null
+
+    hidden static CRHelper()
+    {
+        [CRHelper]::ResetFuncsToNormal()
+    }
+>>>>>>> 2948b9ccfc7bbee75c290c5baa572f54a7fefb63
  
     <#
         .SYNOPSIS
@@ -47,15 +61,15 @@ class CRHelper
         .PARAMETER computerInfo
             ComputerInfo Object
     #>
-    hidden static [bool] Test_IsNanoServer([ComputerInfo] $computerInfo) 
+    hidden static [bool] Test_IsNanoServer([Microsoft.PowerShell.Commands.ComputerInfo] $computerInfo) 
     {
         if ($null -ne [CRHelper]::TestIsNanoServerFunc) {
             return [CRHelper]::TestIsNanoServerFunc.Invoke($computerInfo)
         }
         return (
                     $null -ne $computerInfo -and 
-                    $computerInfo.OsProductType -eq [ProductType]::Server -and
-                    $computerInfo.OsServerLevel -eq [ServerLevel]::NanoServer
+                    $computerInfo.OsProductType -eq [Microsoft.PowerShell.Commands.ProductType]::Server -and
+                    $computerInfo.OsServerLevel -eq [Microsoft.PowerShell.Commands.ServerLevel]::NanoServer
                )        
     }
 
@@ -64,7 +78,7 @@ class CRHelper
             Gets Computer Info broken out for unit testing and mocking.
     #>
 
-    hidden static [ComputerInfo] Get_ComputerInfo()
+    hidden static [Microsoft.PowerShell.Commands.ComputerInfo] Get_ComputerInfo()
     {
         # If we have an alternate Func call that instead (Allows for Unit Testing)
         if ($null -ne [CRHelper]::GetComputerInfoFunc) 
@@ -109,7 +123,7 @@ class CRHelper
             The name of the invalid argument that is causing this error to be thrown
     #>
     static [void] New_InvalidArgumentException(
-        [String]$Message, 
+        [String] $Message, 
         [String] $ArgumentName
     ) 
     {   
