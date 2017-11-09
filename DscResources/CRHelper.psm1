@@ -7,7 +7,7 @@ using namespace Microsoft.PowerShell.Commands
         (Replaces CommonResourceHelper.psm1's cmdlet based helper methods)
 #>
 class CRHelper 
-{   
+{
     static [string] $UICulture = $PSUICulture
     static [bool] $IsNanoServer = [CRHelper]::Test_IsNanoServer([CRHelper]::Get_ComputerInfo())
 
