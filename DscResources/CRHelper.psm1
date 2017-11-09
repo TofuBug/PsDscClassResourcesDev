@@ -54,7 +54,6 @@ class CRHelper
     {
         if ($null -ne [CRHelper]::TestIsNanoServerFunc) 
         {
-
             return [CRHelper]::TestIsNanoServerFunc.Invoke($computerInfo)
         }
         return (
@@ -185,8 +184,8 @@ class CRHelper
         $localizedStringFileLocation = Join-Path -Path $resourceDirectory -ChildPath ([CRHelper]::UICulture)
         Write-Verbose "LocalizedPath: $($localizedStringFileLocation)"
         if (-not (Test-Path -Path $localizedStringFileLocation)) 
-        { # Fallback to en-US
-
+        { 
+            # Fallback to en-US
             $localizedStringFileLocation = Join-Path -Path $resourceDirectory -ChildPath 'en-US'
         }
         return Import-LocalizedData -FileName "$ResourceName.strings.psd1" -BaseDirectory $localizedStringFileLocation 
