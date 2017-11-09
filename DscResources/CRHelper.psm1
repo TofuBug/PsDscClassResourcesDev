@@ -52,7 +52,9 @@ class CRHelper
     #>
     hidden static [bool] Test_IsNanoServer([Microsoft.PowerShell.Commands.ComputerInfo] $computerInfo) 
     {
-        if ($null -ne [CRHelper]::TestIsNanoServerFunc) {
+        if ($null -ne [CRHelper]::TestIsNanoServerFunc) 
+        {
+
             return [CRHelper]::TestIsNanoServerFunc.Invoke($computerInfo)
         }
         return (
@@ -66,7 +68,6 @@ class CRHelper
         .SYNOPSIS
             Gets Computer Info broken out for unit testing and mocking.
     #>
-
     hidden static [Microsoft.PowerShell.Commands.ComputerInfo] Get_ComputerInfo()
     {
         # If we have an alternate Func call that instead (Allows for Unit Testing)
@@ -185,6 +186,7 @@ class CRHelper
         Write-Verbose "LocalizedPath: $($localizedStringFileLocation)"
         if (-not (Test-Path -Path $localizedStringFileLocation)) 
         { # Fallback to en-US
+
             $localizedStringFileLocation = Join-Path -Path $resourceDirectory -ChildPath 'en-US'
         }
         return Import-LocalizedData -FileName "$ResourceName.strings.psd1" -BaseDirectory $localizedStringFileLocation 
