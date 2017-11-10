@@ -4,7 +4,7 @@ using namespace System.Collections
 using namespace System.Globalization
 using namespace Microsoft.Win32
 # Import CommonResourceHelper for Get-LocalizedData
-using module ..\CRHelper.psm1
+using module ..\CommonClassResourceHelper.psm1
 
 # Ensure enumeration for testing the DSC resource
 enum Ensure 
@@ -52,7 +52,7 @@ class xRegistryKey
     {
         # Populate Localization Data
         Write-Verbose -Message "Static Constructor"
-        [xRegistryKey]::LocalizedData = [CRHelper]::Get_LocalizedData('MSFT_RegistryResource')
+        [xRegistryKey]::LocalizedData = [CommonClassResourceHelper]::Get_LocalizedData('MSFT_RegistryResource')
     }
      
     <# 
@@ -94,7 +94,7 @@ class xRegistryKey
                 # Check if the registry key has subkeys and the user does not want to forcibly remove the registry key
                 if ($this.HasSubKeys($this.Key) -and -not $this.Force) 
                 {
-                    [CRHelper]::New_InvalidOperationException(([xRegistryKey].LocalizedData.CannotRemoveExistingRegistryKeyWithSubKeysWithoutForce -f $this.Hive, $this.Key))
+                    [CommonClassResourceHelper]::New_InvalidOperationException(([xRegistryKey].LocalizedData.CannotRemoveExistingRegistryKeyWithSubKeysWithoutForce -f $this.Hive, $this.Key))
                 }
                 else
                 {
@@ -149,7 +149,7 @@ class xRegistryKey
         # Validate that the specified PSDrive is valid
         if (($null -eq $registryDriveInfo) -or ($null -eq $registryDriveInfo.Provider) -or ($registryDriveInfo.Provider.Name -ine 'Registry')) 
         {
-            [CRHelper]::New_InvalidOperationException(([xRegistryKey]::LocalizedData.RegistryDriveCouldNotBeMounted -f $this.Hive))
+            [CommonClassResourceHelper]::New_InvalidOperationException(([xRegistryKey]::LocalizedData.RegistryDriveCouldNotBeMounted -f $this.Hive))
         }
     }
      
@@ -387,7 +387,7 @@ class xRegistryValue : xRegistryKey
                     if (-not $this.Force) 
                     {
                         # If the user does not want to overwrite the value, throw an error
-                        [CRHelper]::New_InvalidOperationException(([xRegistryValue].LocalizedData.CannotOverwriteExistingRegistryKeyValueWithoutForce -f $this.Hive, $this.Key, $this.ValueName))
+                        [CommonClassResourceHelper]::New_InvalidOperationException(([xRegistryValue].LocalizedData.CannotOverwriteExistingRegistryKeyValueWithoutForce -f $this.Hive, $this.Key, $this.ValueName))
                     }
                     else
                     {
@@ -609,7 +609,7 @@ class xRegistryValue : xRegistryKey
     {
         if (($null -ne $this.ValueData) -and ($this.ValueData.Count -gt 1)) 
         {
-            [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'Binary'))
+            [CommonClassResourceHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'Binary'))
         }
         $binaryRegistryKeyValue = [Byte[]] @()
         if (($null -ne $this.ValueData) -and ($this.ValueData.Count -eq 1) -and (-not [String]::IsNullOrEmpty($this.ValueData[0]))) 
@@ -632,7 +632,7 @@ class xRegistryValue : xRegistryKey
             }
             catch 
             {
-                [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.BinaryDataNotInHexFormat -f $singleRegistryKeyValue)) 
+                [CommonClassResourceHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.BinaryDataNotInHexFormat -f $singleRegistryKeyValue)) 
             }
         }
         return $binaryRegistryKeyValue
@@ -646,7 +646,7 @@ class xRegistryValue : xRegistryKey
     {
         if (($null -ne $this.ValueData) -and ($this.ValueData.Count -gt 1)) 
         {
-            [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'Dword'))
+            [CommonClassResourceHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'Dword'))
         }
         $dwordRegistryKeyValue = [Int32] 0
         if (($null -ne $this.ValueData) -and ($this.ValueData.Count -eq 1) -and (-not [String]::IsNullOrEmpty($this.ValueData[0])))
@@ -666,7 +666,7 @@ class xRegistryValue : xRegistryKey
                 }
                 else
                 {
-                    [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.DWordDataNotInHexFormat -f $singleRegistryKeyValue)) 
+                    [CommonClassResourceHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.DWordDataNotInHexFormat -f $singleRegistryKeyValue)) 
                 }
             }
             else
@@ -701,7 +701,7 @@ class xRegistryValue : xRegistryKey
     {
         if (($null -ne $this.ValueData) -and ($this.ValueData.Count -gt 1)) 
         {
-            [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'Qword'))
+            [CommonClassResourceHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'Qword'))
         }
         $qwordRegistryKeyValue = [Int64] 0  
         if (($null -ne $this.ValueData) -and ($this.ValueData.Count -eq 1) -and (-not [String]::IsNullOrEmpty($this.ValueData[0]))) 
@@ -721,7 +721,7 @@ class xRegistryValue : xRegistryKey
                 }
                 else
                 {
-                    [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.QWordDataNotInHexFormat -f $singleRegistryKeyValue)) 
+                    [CommonClassResourceHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.QWordDataNotInHexFormat -f $singleRegistryKeyValue)) 
                 }
             }
             else
@@ -740,7 +740,7 @@ class xRegistryValue : xRegistryKey
     {
         if (($null -ne $this.ValueData) -and ($this.ValueData.Count -gt 1)) 
         {
-            [CRHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'String or ExpandString'))
+            [CommonClassResourceHelper]::New_InvalidArgumentException('ValueData',([xRegistryValue]::LocalizedData.ArrayNotAllowedForExpectedType -f 'String or ExpandString'))
         }
         if (($null -ne $this.ValueData) -and ($this.ValueData.Count -eq 1)) 
         {

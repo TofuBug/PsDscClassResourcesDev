@@ -1,11 +1,11 @@
 using namespace Microsoft.PowerShell.Commands
-#using module "C:\Users\tofub_000\classtests.psm1"
-using module ..\..\DscResources\CRHelper.psm1
+#using module ($PSScriptRoot | Split-Path | Split-Path | Join-Path -ChildPath "DscResources\CommonClassResourceHelper.psm1")
+using module ..\..\DscResources\CommonClassResourceHelper.psm1
 
 $errorActionPreference = 'Stop'
 Set-StrictMode -Version 'Latest'
 
-Describe 'CRHelper Unit Tests' {
+Describe 'CommonClassResourceHelper Unit Tests' {
     BeforeAll {
     }
     Describe 'Test-IsNanoServer' {
@@ -30,143 +30,143 @@ Describe 'CRHelper Unit Tests' {
         $testComputerInfoNotServer.OsServerLevel = [ServerLevel]::Unknown
         Context 'Get-ComputerInfo command exists and succeeds' {
         Context 'Computer OS type is Server and OS server level is NanoServer' {
-            [CRHelper]::GetComputerInfoFunc = { return $testComputerInfoNanoServer }
+            [CommonClassResourceHelper]::GetComputerInfoFunc = { return $testComputerInfoNanoServer }
             It 'Should not throw' {
                 { 
-                    $null = [CRHelper]::Test_IsNanoServer() 
+                    $null = [CommonClassResourceHelper]::Test_IsNanoServer() 
                 } | Should Not Throw
             }
             It 'Should return true' {
-                [CRHelper]::Test_IsNanoServer() | Should Be $true
+                [CommonClassResourceHelper]::Test_IsNanoServer() | Should Be $true
             }
             Context 'Only Get_ComputerInfo has been "Mocked"' {
                 It 'GetComputerInfoFunc Should NOT be null (It has been mocked)' {
-                    [CRHelper]::GetComputerInfoFunc | Should Not Be $null
+                    [CommonClassResourceHelper]::GetComputerInfoFunc | Should Not Be $null
                 }
                 It 'TestCommandExistsFunc Should be null' {
-                    [CRHelper]::TestCommandExistsFunc | Should Be $null
+                    [CommonClassResourceHelper]::TestCommandExistsFunc | Should Be $null
                 }
                 It 'TestIsNanoServerFunc Should be null' {
-                    [CRHelper]::TestIsNanoServerFunc | Should Be $null
+                    [CommonClassResourceHelper]::TestIsNanoServerFunc | Should Be $null
                 }
             }
         }   
         Context 'Computer OS type is Server and OS server level is not NanoServer' {
-            [CRHelper]::GetComputerInfoFunc = { return $testComputerInfoServerNotNano }        
+            [CommonClassResourceHelper]::GetComputerInfoFunc = { return $testComputerInfoServerNotNano }        
             It 'Should not throw' {
-                { $null = [CRHelper]::IsNanoServer } | Should Not Throw
+                { $null = [CommonClassResourceHelper]::IsNanoServer } | Should Not Throw
             }
             It 'Should return false' {
-                [CRHelper]::Test_IsNanoServer()  | Should Be $false
+                [CommonClassResourceHelper]::Test_IsNanoServer()  | Should Be $false
             }
             Context 'Only Get_ComputerInfo has been "Mocked"' {
                 It 'GetComputerInfoFunc Should NOT be null (It has been mocked)' {
-                    [CRHelper]::GetComputerInfoFunc | Should Not Be $null
+                    [CommonClassResourceHelper]::GetComputerInfoFunc | Should Not Be $null
                 }
                 It 'TestCommandExistsFunc Should be null' {
-                    [CRHelper]::TestCommandExistsFunc | Should Be $null
+                    [CommonClassResourceHelper]::TestCommandExistsFunc | Should Be $null
                 }
                 It 'TestIsNanoServerFunc Should be null' {
-                    [CRHelper]::TestIsNanoServerFunc | Should Be $null
+                    [CommonClassResourceHelper]::TestIsNanoServerFunc | Should Be $null
                 }
             }
         }
         Context 'Computer OS type is not Server' {
-            [CRHelper]::GetComputerInfoFunc = { return $testComputerInfoNotServer }
+            [CommonClassResourceHelper]::GetComputerInfoFunc = { return $testComputerInfoNotServer }
             It 'Should not throw' {
-                { $null = [CRHelper]::Test_IsNanoServer() } | Should Not Throw
+                { $null = [CommonClassResourceHelper]::Test_IsNanoServer() } | Should Not Throw
             }
             It 'Should return false' {
-                [CRHelper]::Test_IsNanoServer() | Should Be $false
+                [CommonClassResourceHelper]::Test_IsNanoServer() | Should Be $false
             }
             Context 'Only Get_ComputerInfo has been "Mocked"' {
                 It 'GetComputerInfoFunc Should NOT be null (It has been mocked)' {
-                    [CRHelper]::GetComputerInfoFunc | Should Not Be $null
+                    [CommonClassResourceHelper]::GetComputerInfoFunc | Should Not Be $null
                 }
                 It 'TestCommandExistsFunc Should be null' {
-                    [CRHelper]::TestCommandExistsFunc | Should Be $null
+                    [CommonClassResourceHelper]::TestCommandExistsFunc | Should Be $null
                 }
                 It 'TestIsNanoServerFunc Should be null' {
-                    [CRHelper]::TestIsNanoServerFunc | Should Be $null
+                    [CommonClassResourceHelper]::TestIsNanoServerFunc | Should Be $null
                 }
             }                    
         }
         }
         Context 'Get-ComputerInfo command exists but throws an error and returns null' {
-        [CRHelper]::ResetFuncsToNormal()
-        [CRHelper]::GetComputerInfoFunc = { return $null }
+        [CommonClassResourceHelper]::ResetFuncsToNormal()
+        [CommonClassResourceHelper]::GetComputerInfoFunc = { return $null }
         It 'Should not throw' {
-            { $null = [CRHelper]::IsNanoServer } | Should Not Throw
+            { $null = [CommonClassResourceHelper]::IsNanoServer } | Should Not Throw
         }
         It 'Should return false' {
-            [CRHelper]::IsNanoServer | Should Be $false
+            [CommonClassResourceHelper]::IsNanoServer | Should Be $false
         }
         Context 'Only Get_ComputerInfo has been "Mocked"' {    
             It 'GetComputerInfoFunc Should NOT be null (It has been mocked' {
-                [CRHelper]::GetComputerInfoFunc | Should Not Be $null
+                [CommonClassResourceHelper]::GetComputerInfoFunc | Should Not Be $null
             }
             It 'TestCommandExistsFunc Should be null' {
-                [CRHelper]::TestCommandExistsFunc | Should Be $null
+                [CommonClassResourceHelper]::TestCommandExistsFunc | Should Be $null
             }
             It 'TestIsNanoServerFunc Should be null' {
-                [CRHelper]::TestIsNanoServerFunc | Should Be $null
+                [CommonClassResourceHelper]::TestIsNanoServerFunc | Should Be $null
             }
         }                                        
         }
         Context 'Get-ComputerInfo command does not exist' {
-        [CRHelper]::ResetFuncsToNormal()
-        [CRHelper]::TestCommandExistsFunc = { return $false }
+        [CommonClassResourceHelper]::ResetFuncsToNormal()
+        [CommonClassResourceHelper]::TestCommandExistsFunc = { return $false }
         It 'Should not throw' {
-            { $null = [CRHelper]::IsNanoServer } | Should Not Throw
+            { $null = [CommonClassResourceHelper]::IsNanoServer } | Should Not Throw
         }
         It 'Should return false' {
-            [CRHelper]::IsNanoServer | Should Be $false
+            [CommonClassResourceHelper]::IsNanoServer | Should Be $false
         }
         Context 'Only Test_CommandExists has been "Mocked"' {
             It 'GetComputerInfoFunc Should be null' {
-                [CRHelper]::GetComputerInfoFunc | Should Be $null
+                [CommonClassResourceHelper]::GetComputerInfoFunc | Should Be $null
             }
             It 'TestCommandExistsFunc Should NOT be null (It has been mocked' {
-                [CRHelper]::TestCommandExistsFunc | Should Not Be $null
+                [CommonClassResourceHelper]::TestCommandExistsFunc | Should Not Be $null
             }
             It 'TestIsNanoServerFunc Should be null' {
-                [CRHelper]::TestIsNanoServerFunc | Should Be $null
+                [CommonClassResourceHelper]::TestIsNanoServerFunc | Should Be $null
             }
         }        
-        [CRHelper]::ResetFuncsToNormal()                                
+        [CommonClassResourceHelper]::ResetFuncsToNormal()                                
         }
     }
     Describe 'Test_CommandExists' {
         $testCommandName = 'TestCommandName'
-        [CRHelper]::ResetFuncsToNormal()
-        Mock -CommandName 'Get-Command' -MockWith { return $Name } -ModuleName CRHelper
+        [CommonClassResourceHelper]::ResetFuncsToNormal()
+        Mock -CommandName 'Get-Command' -MockWith { return $Name } -ModuleName CommonClassResourceHelper
         Context 'Get-Command returns the command' {
             It 'Should not throw' {
-                { $null = [CRHelper]::Test_CommandExists($testCommandName) } | Should Not Throw
+                { $null = [CommonClassResourceHelper]::Test_CommandExists($testCommandName) } | Should Not Throw
             }
             It 'Should retrieve the command with the specified name' {
                 $getCommandParameterFilter = {
                     return $Name -eq $testCommandName
                 }
-                Assert-MockCalled -CommandName 'Get-Command' -ParameterFilter $getCommandParameterFilter -Exactly 1 -Scope 'Context' -ModuleName CRHelper
+                Assert-MockCalled -CommandName 'Get-Command' -ParameterFilter $getCommandParameterFilter -Exactly 1 -Scope 'Context' -ModuleName CommonClassResourceHelper
             }
             It 'Should return true' {
-                [CRHelper]::Test_CommandExists($testCommandName) | Should Be $true
+                [CommonClassResourceHelper]::Test_CommandExists($testCommandName) | Should Be $true
             }
         }
         Context 'Get-Command returns null' {
-            Mock -CommandName 'Get-Command' -MockWith { return $null } -ModuleName CRHelper
+            Mock -CommandName 'Get-Command' -MockWith { return $null } -ModuleName CommonClassResourceHelper
             It 'Should not throw' {
-                { $null = [CRHelper]::Test_CommandExists($testCommandName) } | Should Not Throw
+                { $null = [CommonClassResourceHelper]::Test_CommandExists($testCommandName) } | Should Not Throw
             }
             It 'Should retrieve the command with the specified name' {
                 $getCommandParameterFilter = {
                     return $Name -eq $testCommandName
                 }
-                Assert-MockCalled -CommandName 'Get-Command' -ParameterFilter $getCommandParameterFilter -Exactly 1 -Scope 'Context' -ModuleName CRHelper
+                Assert-MockCalled -CommandName 'Get-Command' -ParameterFilter $getCommandParameterFilter -Exactly 1 -Scope 'Context' -ModuleName CommonClassResourceHelper
             }
             It 'Should return false' {
-                [CRHelper]::Test_CommandExists($testCommandName) | Should Be $false
+                [CommonClassResourceHelper]::Test_CommandExists($testCommandName) | Should Be $false
             }
         }
     }

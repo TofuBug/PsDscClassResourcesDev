@@ -6,10 +6,10 @@ using namespace Microsoft.PowerShell.Commands
         Sets up Class with Static Helper Methods and Properties
         (Replaces CommonResourceHelper.psm1's cmdlet based helper methods)
 #>
-class CRHelper 
+class CommonClassResourceHelper 
 {
     static [string] $UICulture = $PSUICulture
-    static [bool] $IsNanoServer = [CRHelper]::Test_IsNanoServer([CRHelper]::Get_ComputerInfo())
+    static [bool] $IsNanoServer = [CommonClassResourceHelper]::Test_IsNanoServer([CommonClassResourceHelper]::Get_ComputerInfo())
 
     # Delegate hooks for unit testing
     #
@@ -24,9 +24,9 @@ class CRHelper
     #>
     hidden static [void] ResetFuncsToNormal()
     {
-        [CRHelper]::TestCommandExistsFunc = $null
-        [CRHelper]::GetComputerInfoFunc =   $null
-        [CRHelper]::TestIsNanoServerFunc =  $null
+        [CommonClassResourceHelper]::TestCommandExistsFunc = $null
+        [CommonClassResourceHelper]::GetComputerInfoFunc =   $null
+        [CommonClassResourceHelper]::TestIsNanoServerFunc =  $null
     }
 
     <#
@@ -39,7 +39,7 @@ class CRHelper
     #>
     static [bool] Test_IsNanoServer() 
     {
-        return [CRHelper]::Test_IsNanoServer([CRHelper]::Get_ComputerInfo())
+        return [CommonClassResourceHelper]::Test_IsNanoServer([CommonClassResourceHelper]::Get_ComputerInfo())
     }
 
     <#
@@ -52,9 +52,9 @@ class CRHelper
     #>
     hidden static [bool] Test_IsNanoServer([Microsoft.PowerShell.Commands.ComputerInfo] $computerInfo) 
     {
-        if ($null -ne [CRHelper]::TestIsNanoServerFunc) 
+        if ($null -ne [CommonClassResourceHelper]::TestIsNanoServerFunc) 
         {
-            return [CRHelper]::TestIsNanoServerFunc.Invoke($computerInfo)
+            return [CommonClassResourceHelper]::TestIsNanoServerFunc.Invoke($computerInfo)
         }
         return (
                     $null -ne $computerInfo -and 
@@ -70,12 +70,12 @@ class CRHelper
     hidden static [Microsoft.PowerShell.Commands.ComputerInfo] Get_ComputerInfo()
     {
         # If we have an alternate Func call that instead (Allows for Unit Testing)
-        if ($null -ne [CRHelper]::GetComputerInfoFunc) 
+        if ($null -ne [CommonClassResourceHelper]::GetComputerInfoFunc) 
         {
-            return [CRHelper]::GetComputerInfoFunc.Invoke()
+            return [CommonClassResourceHelper]::GetComputerInfoFunc.Invoke()
         }
         $computerInfo = $null
-        if ([CRHelper]::Test_CommandExists('Get-ComputerInfo'))
+        if ([CommonClassResourceHelper]::Test_CommandExists('Get-ComputerInfo'))
         {
             $computerInfo = Get-ComputerInfo -ErrorAction 'SilentlyContinue'    
         }
@@ -94,9 +94,9 @@ class CRHelper
     ) 
     {
         # If we have an alternate Func call that instead (Allows for Unit Testinga)
-        if ($null -ne [CRHelper]::TestCommandExistsFunc) 
+        if ($null -ne [CommonClassResourceHelper]::TestCommandExistsFunc) 
         {
-            return [CRHelper]::TestCommandExistsFunc.Invoke($Name)
+            return [CommonClassResourceHelper]::TestCommandExistsFunc.Invoke($Name)
         }
         return ($null -ne (Get-Command -Name $Name  -ErrorAction 'SilentlyContinue' )) 
     }
@@ -181,7 +181,7 @@ class CRHelper
 
         Write-Verbose "ResourceName: $ResourceName"
         $resourceDirectory = Join-Path -Path $PSScriptRoot -ChildPath $ResourceName
-        $localizedStringFileLocation = Join-Path -Path $resourceDirectory -ChildPath ([CRHelper]::UICulture)
+        $localizedStringFileLocation = Join-Path -Path $resourceDirectory -ChildPath ([CommonClassResourceHelper]::UICulture)
         Write-Verbose "LocalizedPath: $($localizedStringFileLocation)"
         if (-not (Test-Path -Path $localizedStringFileLocation)) 
         { 
