@@ -15,6 +15,135 @@ $script:testEnvironment = Enter-DscResourceTestEnvironment `
     -DscResourceName 'MSFT_RegistryResource' `
     -TestType 'Unit'
 
+    class MockxRegistryKey : xRegistryKey 
+    {
+                         
+        hidden [void] Mount_RegistryDrive() 
+        {
+            $script:Mount_RegistryDriveCalled = $true
+            $script:Mount_RegistryDriveCalledXTimes++
+            if ($null -eq $script:Mount_RegistryDriveAction)
+            {
+                ([xRegistryKey]$this).Mount_RegistryDrive
+            }
+            else 
+            {
+                $script:Mount_RegistryDriveAction.Invoke() 
+            }
+        }
+         
+        hidden [RegistryKey] Open_RegistrySubKey([RegistryKey] $ParentKey, [String] $SubKey, [bool] $WriteAccessAllowed) 
+        {
+            $script:Open_RegistrySubKeyCalled = $true
+            $script:Open_RegistrySubKeyCalledXTimes++
+            if ($null -eq $script:Open_RegistrySubKeyFunc)
+            {
+                return ([xRegistryKey]$this).Open_RegistrySubKey($ParentKey, $SubKey, $WriteAccessAllowed)
+            }
+            else 
+            {
+                return $script:Open_RegistrySubKeyFunc.Invoke($ParentKey, $SubKey, $WriteAccessAllowed)
+            }
+        }
+              
+        hidden [RegistryKey] Get_RegistryKey([String] $RegistryKeyPath,[bool] $WriteAccessAllowed) 
+        {
+            $script:Get_RegistryKeyCalled = $true
+            $script:Get_RegistryKeyCalledXTimes++
+            if ($null -eq $script:Get_RegistryKeyFunc)
+            {
+                return ([xRegistryKey]$this).Get_RegistryKey($RegistryKeyPath,$WriteAccessAllowed)
+            }
+            else
+            {
+                return $script:Get_RegistryKeyFunc.Invoke($RegistryKeyPath,$WriteAccessAllowed)
+            }
+        }
+        
+        hidden [RegistryKey] New_RegistrySubKey([RegistryKey] $ParentRegistryKey,[String] $SubKeyName) 
+        {
+            $script:New_RegistrySubKeyCalled = $true
+            $script:New_RegistrySubKeyCalledXTimes ++
+            if ($null -eq $script:New_RegistrySubKeyFunc)
+            {
+                return ([xRegistryKey]$this).New_RegistrySubKey($ParentRegistryKey, $SubKeyName)
+            }
+            else 
+            {
+                return $script:New_RegistrySubKeyFunc.Invoke($ParentRegistryKey,$SubKeyName)
+            }
+        }
+        
+        hidden [RegistryKey] New_RegistryKey() 
+        {
+            $script:New_RegistryKeyCalled = $true
+            $script:New_RegistryKeyCalledXTimes++
+            if ($null -eq $script:New_RegistryKeyFunc)
+            {
+                return ([xRegistryKey]$this).New_RegistryKey()
+            }
+            else 
+            {
+                return $script:New_RegistryKeyFunc.Invoke()
+            }
+        }
+        
+        hidden [bool] HasSubKeys([String] $RegistryKeyPath ) 
+        {
+            $script:HasSubKeysCalled = $true
+            $script:HasSubKeysCalledXTimes++
+            if ($null -eq $script:HasSubKeysFunc)
+            {
+                return ([xRegistryKey]$this).HasSubKeys($RegistryKeyPath)
+            }
+            else 
+            {
+                return $script:HasSubKeysFunc.Invoke($RegistryKeyPath)
+            }
+        }
+    
+        hidden [bool] KeyExists([String] $RegistryKeyPath) 
+        {
+            $script:KeyExistsCalled = $true
+            $script:KeyExistsCalledXTimes++
+            if ($null -eq $script:KeyExistsFunc)
+            {
+                return ([xRegistryKey]$this).KeyExists($RegistryKeyPath)
+            }
+            else 
+            {
+                return $script:KeyExistsFunc.Invoke($RegistryKeyPath)
+            }
+        }
+    }            
+
+function Reset-MockXRegistryKeyClass()
+{
+    $script:Mount_RegistryDriveCalled = $false
+    $script:Mount_RegistryDriveCalledXTimes = 0
+    $script:Open_RegistrySubKeyCalled = $false
+    $script:Open_RegistrySubKeyCalledXTimes = 0
+    $script:Get_RegistryKeyCalled = $false
+    $script:Get_RegistryKeyCalledXTimes = 0
+    $script:New_RegistrySubKeyCalled = $false
+    $script:New_RegistrySubKeyCalledXTimes = 0
+    $script:New_RegistryKeyCalled = $false
+    $script:New_RegistryKeyCalledXTimes = 0
+    $script:HasSubKeysCalled = $false
+    $script:HasSubKeysCalledXTimes = 0
+    $script:KeyExistsCalled = $false
+    $script:KeyExistsCalledXTimes = 0
+
+    [Action] $script:Mount_RegistryDriveAction = $null
+    [Func[RegistryKey,String,bool,RegistryKey]] $script:Open_RegistrySubKeyFunc = $null
+    [Func[String,bool,RegistryKey]] $script:Get_RegistryKeyFunc = $null
+    [Func[RegistryKey,string,RegistryKey]] $script:New_RegistrySubKeyFunc = $null
+    [Func[RegistryKey]] $script:New_RegistryKeyFunc = $null
+    [Func[string,bool]] $script:HasSubKeysFunc = $null
+    [Func[string,bool]] $script:KeyExistsFunc = $null
+
+}
+
 try
 {
     $script:registryKeyValueTypes = @( 'String', 'Binary', 'DWord', 'QWord', 'MultiString', 'ExpandString' )
@@ -28,27 +157,29 @@ try
     $script:defaultValueData = @()
 
     Describe 'RegistryKey Tests' {
+        BeforeAll {
+            Reset-MockXRegistryKeyClass
+        }
         Describe 'RegistryKey\Get' {
             Context 'Registry key at specified path does not exist' {
                 BeforeAll {
-                    class MockRegistryKey : xRegistryKey
-                    {
-                        hidden [bool] KeyExists([String] $RegistryKeyPath) 
-                        {
-                            return $false 
-                        }
-                    }
-
-                    $MockRegistryKeyResource = [MockRegistryKey]::new()
+                    Reset-MockXRegistryKeyClass
+                    $script:KeyExistsFunc = {Param([string] $KeyPath) return $false}
+                    $MockRegistryKeyResource = [MockxRegistryKey]::new()
                     $MockRegistryKeyResource.Key = $Script:testRegistryKey
                     $MockRegistryKeyResource.Hive = $script:testRegistryHive
+                    $getTargetResourceResult = $MockRegistryKeyResource.Get()                    
                 }
                 
-                It 'Should not throw' {
+                It 'Should not throw and return and XRegistryKey Object' {
+                    { $null = $MockRegistryKeyResource.Get() }| Should Not Throw
+                    $getTargetResourceResult -is [xRegistryKey] | Should Be $true
+                }
+
+               It 'Should not throw' {
                     { $null = $MockRegistryKeyResource.Get() }| Should Not Throw
                 }
 
-                $getTargetResourceResult = $MockRegistryKeyResource.Get()
 
                 It 'Should return an xRegistryKey' {
                     $getTargetResourceResult -is [xRegistryKey] | Should Be $true
@@ -83,7 +214,7 @@ try
                 }
                 
                 It 'Should not throw' {
-                    { $null = [MockRegistryKey]::get() } | Should Not Throw
+                    { $null = $MockRegistryKeyResource.Get() } | Should Not Throw
                 }
 
                 $getTargetResourceResult = $MockRegistryKeyResource.Get() 
