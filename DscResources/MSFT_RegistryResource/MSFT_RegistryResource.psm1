@@ -274,8 +274,7 @@ class xRegistryKey
 }
 
 # Enumeration to limit choices to only the valid ValueTypes
-enum ValueKind 
-{
+enum ValueKind {
     Binary = [RegistryValueKind]::Binary
     DWord = [RegistryValueKind]::DWord
     MultiString = [RegistryValueKind]::MultiString
